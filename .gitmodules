@@ -1,0 +1,4 @@
+[submodule "unpublished-packages/avh4/elm-testable"]
+	path = unpublished-packages/avh4/elm-testable
+	url = https://github.com/avh4/elm-testable.git
+	branch = rewrite-native

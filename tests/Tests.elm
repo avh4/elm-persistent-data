@@ -1,11 +1,11 @@
 module Tests exposing (..)
 
 import Test exposing (..)
-import Persistence.LowLevelTests
+import PersistenceTests
 
 
 all : Test
 all =
     describe "elm-persisent-data"
-        [ Persistence.LowLevelTests.all
+        [ PersistenceTests.all
         ]

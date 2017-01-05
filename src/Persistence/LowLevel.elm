@@ -9,6 +9,8 @@ import NonEmptyList exposing (NonEmptyList)
 type alias Config msg =
     { decoder : Decoder msg
     , encoder : Encoder msg
+    , read : String -> Task String (Maybe String)
+    , write : String -> String -> Task String ()
     }
 
 
