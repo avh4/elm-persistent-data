@@ -6,6 +6,7 @@ import Html.Events
 import Persistence
 import Task
 import Json.Decode
+import Http
 
 
 type alias Data =
@@ -92,10 +93,24 @@ program { read } =
         , updateUi = updateUi
         , subscriptions = \_ _ -> Sub.none
         , view = view
+        , loadingView = Html.text "Loading..."
+        , errorView =
+            \errors ->
+                Html.div []
+                    [ Html.text "Errors:"
+                    , errors |> List.map (\i -> Html.li [] [ Html.text i ]) |> Html.ul []
+                    ]
         , decoder = decoder
         , read = read
         }
 
 
 main =
-    program { read = \_ -> Task.succeed Nothing }
+    program
+        { read =
+            \key ->
+                Http.getString ("/" ++ key)
+                    |> Http.toTask
+                    |> Task.map Just
+                    |> Task.mapError toString
+        }

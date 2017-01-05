@@ -1,0 +1,9 @@
+{
+    "events": [{
+        "tag": "AddItem",
+        "$0": "buy carrots"
+    }, {
+        "tag": "AddItem",
+        "$0": "feed the horse"
+    }]
+}

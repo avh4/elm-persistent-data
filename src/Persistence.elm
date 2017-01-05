@@ -13,6 +13,8 @@ type alias Config data event state msg =
     , updateUi : data -> msg -> state -> ( state, Cmd msg, Maybe event )
     , subscriptions : data -> state -> Sub msg
     , view : data -> state -> Html msg
+    , loadingView : Html Never
+    , errorView : List String -> Html Never
     , decoder :
         Decoder event
         -- , encoder : event -> Json.Encode.Value
@@ -28,6 +30,7 @@ type PersistenceModel data state
         { data : data
         , ui : state
         , loaded : Bool
+        , errors : List String
         }
 
 
@@ -39,6 +42,7 @@ init config =
         { data = config.initApp
         , ui = Tuple.first config.initUi
         , loaded = False
+        , errors = []
         }
     , Cmd.batch
         [ Cmd.map UiMsg (Tuple.second config.initUi)
@@ -65,7 +69,7 @@ current (PersistenceModel model) =
 type PersistenceMsg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe String))
-    | ReadBatch (Result String (Maybe String))
+    | ReadBatch String (Result String (Maybe String))
 
 
 update :
@@ -101,13 +105,18 @@ update config msg (PersistenceModel model) =
 
         ReadRoot (Ok (Just lastBatchName)) ->
             ( PersistenceModel model
-            , Task.attempt ReadBatch <| config.read lastBatchName
+            , Task.attempt (ReadBatch lastBatchName) <| config.read lastBatchName
             )
 
-        ReadRoot (Err _) ->
-            Debug.crash "TODO"
+        ReadRoot (Err message) ->
+            ( PersistenceModel
+                { model
+                    | errors = ("Error reading root: " ++ message) :: model.errors
+                }
+            , Cmd.none
+            )
 
-        ReadBatch (Ok (Just batchJson)) ->
+        ReadBatch id (Ok (Just batchJson)) ->
             case Json.Decode.decodeString (Json.Decode.field "events" <| Json.Decode.list config.decoder) batchJson of
                 Ok events ->
                     ( PersistenceModel
@@ -119,22 +128,37 @@ update config msg (PersistenceModel model) =
                     )
 
                 Err message ->
-                    Debug.crash message
+                    ( PersistenceModel
+                        { model
+                            | errors = ("Error decoding batch " ++ id ++ ": " ++ message) :: model.errors
+                        }
+                    , Cmd.none
+                    )
 
-        ReadBatch (Ok Nothing) ->
+        ReadBatch _ (Ok Nothing) ->
             Debug.crash "TODO: this is a fatal loading error; a known batch of events is missing"
 
-        ReadBatch (Err _) ->
-            Debug.crash "TODO"
+        ReadBatch id (Err message) ->
+            ( PersistenceModel
+                { model
+                    | errors = ("Error reading batch " ++ id ++ ": " ++ message) :: model.errors
+                }
+            , Cmd.none
+            )
 
 
 view :
-    (data -> state -> Html msg)
+    Config data event state msg
     -> PersistenceModel data state
     -> Html (PersistenceMsg event msg)
-view appView (PersistenceModel model) =
-    appView model.data model.ui
-        |> Html.map UiMsg
+view config (PersistenceModel model) =
+    if model.errors /= [] then
+        Html.map never (config.errorView model.errors)
+    else if model.loaded == False then
+        Html.map never config.loadingView
+    else
+        config.view model.data model.ui
+            |> Html.map UiMsg
 
 
 program :
@@ -145,5 +169,5 @@ program config =
         { init = init config
         , update = update config
         , subscriptions = \_ -> Sub.none
-        , view = view config.view
+        , view = view config
         }

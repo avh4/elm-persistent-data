@@ -5,6 +5,20 @@ const PORT = 8080
 
 function handleRequest (request, response) {
   var key = request.url.slice(1)
+
+  if (key === '') {
+    fs.open('index.html', 'r', function (err, fd) {
+      if (err) {
+        response.writeHead(404)
+        response.end('Read failed: index.html')
+      } else {
+        var readStream = fs.createReadStream(null, {fd: fd})
+        readStream.pipe(response)
+      }
+    })
+    return
+  }
+
   if (key.match(/[/.]/)) {
     response.writeHead(400)
     response.end('Path cannot contain \'.\' or \'/\'')
