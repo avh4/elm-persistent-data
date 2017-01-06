@@ -6,6 +6,7 @@ import Html.Events
 import Persistence
 import Task
 import Json.Decode
+import Json.Encode
 import Http
 
 
@@ -33,6 +34,16 @@ decoder =
     in
         Json.Decode.field "tag" Json.Decode.string
             |> Json.Decode.andThen dispatch
+
+
+encoder : Event -> Json.Encode.Value
+encoder event =
+    case event of
+        AddItem name ->
+            Json.Encode.object
+                [ ( "tag", Json.Encode.string "AddItem" )
+                , ( "$0", Json.Encode.string name )
+                ]
 
 
 update : Event -> Data -> Data
@@ -85,7 +96,7 @@ view data state =
         ]
 
 
-program { read } =
+program { read, write } =
     Persistence.program
         { initApp = { list = [] }
         , initUi = ( { input = "" }, Cmd.none )
@@ -101,7 +112,9 @@ program { read } =
                     , errors |> List.map (\i -> Html.li [] [ Html.text i ]) |> Html.ul []
                     ]
         , decoder = decoder
+        , encoder = encoder
         , read = read
+        , write = write
         }
 
 
@@ -112,5 +125,18 @@ main =
                 Http.getString ("/" ++ key)
                     |> Http.toTask
                     |> Task.map Just
+                    |> Task.mapError toString
+        , write =
+            \key blob ->
+                Http.request
+                    { method = "PUT"
+                    , headers = []
+                    , url = ("/" ++ key)
+                    , body = Http.stringBody "application/octet-stream" blob
+                    , expect = Http.expectStringResponse (\_ -> Ok ())
+                    , timeout = Nothing
+                    , withCredentials = False
+                    }
+                    |> Http.toTask
                     |> Task.mapError toString
         }

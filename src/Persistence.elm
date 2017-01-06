@@ -4,6 +4,7 @@ import Html exposing (Html)
 import Json.Decode exposing (Decoder)
 import Json.Encode
 import Task exposing (Task)
+import Sha256
 
 
 type alias Config data event state msg =
@@ -15,12 +16,11 @@ type alias Config data event state msg =
     , view : data -> state -> Html msg
     , loadingView : Html Never
     , errorView : List String -> Html Never
-    , decoder :
-        Decoder event
-        -- , encoder : event -> Json.Encode.Value
-    , read :
-        String -> Task String (Maybe String)
-        -- , write : String -> String -> Task String ()
+    , decoder : Decoder event
+    , encoder : event -> Json.Encode.Value
+    , read : String -> Task String (Maybe String)
+    , write :
+        String -> String -> Task String ()
         -- , maxBatchSize/maxBlobSize : Int
     }
 
@@ -70,6 +70,7 @@ type PersistenceMsg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe String))
     | ReadBatch String (Result String (Maybe String))
+    | WriteBatch (Result String ())
 
 
 {-| Not sure if this should be exposed... it's needed for testing, though
@@ -77,6 +78,24 @@ type PersistenceMsg event msg
 uimsg : msg -> PersistenceMsg event msg
 uimsg =
     UiMsg
+
+
+writeBatch : Config data event state msg -> List event -> Task String ()
+writeBatch config events =
+    let
+        json =
+            [ ( "events"
+              , List.map config.encoder events
+                    |> Json.Encode.list
+              )
+            ]
+                |> Json.Encode.object
+                |> Json.Encode.encode 0
+
+        key =
+            "sha256-" ++ Sha256.sha256 json
+    in
+        config.write key json
 
 
 update :
@@ -88,21 +107,27 @@ update config msg (PersistenceModel model) =
     case msg of
         UiMsg m ->
             let
-                ( newUi, cmd, event ) =
+                ( newUi, uiCmd, event ) =
                     config.updateUi model.data m model.ui
+
+                ( newData, writeCmd ) =
+                    case event of
+                        Nothing ->
+                            ( model.data, Cmd.none )
+
+                        Just ev ->
+                            ( config.update ev model.data
+                            , writeBatch config [ ev ]
+                                |> Task.attempt WriteBatch
+                            )
             in
                 ( PersistenceModel
                     { model
                         | ui = newUi
-                        , data =
-                            case event of
-                                Nothing ->
-                                    model.data
-
-                                Just ev ->
-                                    config.update ev model.data
+                        , data = newData
                     }
-                , Cmd.none
+                , writeCmd
+                  -- TODO: use uiCmd
                 )
 
         ReadRoot (Ok Nothing) ->
@@ -152,6 +177,14 @@ update config msg (PersistenceModel model) =
                 }
             , Cmd.none
             )
+
+        WriteBatch (Ok ()) ->
+            ( PersistenceModel model
+            , Cmd.none
+            )
+
+        WriteBatch (Err _) ->
+            Debug.crash "TODO: WriteBatch Err"
 
 
 view :

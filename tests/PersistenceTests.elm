@@ -15,7 +15,9 @@ all =
         [ test "initially shows loading view" <|
             \() ->
                 TestApp.program
-                    { read = \_ -> Task.map (always <| Nothing) <| Process.sleep 999 }
+                    { read = \_ -> Task.map (always <| Nothing) <| Process.sleep 999
+                    , write = \_ _ -> Task.succeed ()
+                    }
                     |> TestContext.start
                     |> TestContext.model
                     |> Persistence.current
@@ -24,7 +26,9 @@ all =
             [ test "with no previous data, when load succeeds, shows initial state" <|
                 \() ->
                     TestApp.program
-                        { read = \_ -> Task.succeed Nothing }
+                        { read = \_ -> Task.succeed Nothing
+                        , write = \_ _ -> Task.succeed ()
+                        }
                         |> TestContext.start
                         |> TestContext.model
                         |> Persistence.current
@@ -47,6 +51,7 @@ all =
 
                                     _ ->
                                         Task.succeed Nothing
+                        , write = \_ _ -> Task.succeed ()
                         }
                         |> TestContext.start
                         |> TestContext.model
@@ -68,7 +73,9 @@ all =
             [ test "UI messages should update the UI state" <|
                 \() ->
                     TestApp.program
-                        { read = \_ -> Task.succeed Nothing }
+                        { read = \_ -> Task.succeed Nothing
+                        , write = \_ _ -> Task.succeed ()
+                        }
                         |> TestContext.start
                         |> TestContext.update (TestApp.Typed "world" |> Persistence.uimsg)
                         |> TestContext.model
@@ -81,7 +88,9 @@ all =
             , test "when an event is produced, it updates the app data" <|
                 \() ->
                     TestApp.program
-                        { read = \_ -> Task.succeed Nothing }
+                        { read = \_ -> Task.succeed Nothing
+                        , write = \_ _ -> Task.succeed ()
+                        }
                         |> TestContext.start
                         |> TestContext.update (TestApp.Typed "world" |> Persistence.uimsg)
                         |> TestContext.update (TestApp.Add |> Persistence.uimsg)
@@ -91,6 +100,24 @@ all =
                             (Persistence.Ready
                                 { list = [ "world" ] }
                                 { input = "" }
+                            )
+            ]
+        , describe "writing a new event"
+            [ test "initiates the write" <|
+                \() ->
+                    TestApp.program
+                        { read = \_ -> Task.succeed Nothing
+                        , write =
+                            \key value ->
+                                TestContext.mockTask ( "write", key, value )
+                        }
+                        |> TestContext.start
+                        |> TestContext.update (TestApp.Typed "world" |> Persistence.uimsg)
+                        |> TestContext.update (TestApp.Add |> Persistence.uimsg)
+                        |> TestContext.expectMockTask
+                            ( "write"
+                            , "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e"
+                            , "{\"events\":[{\"tag\":\"AddItem\",\"$0\":\"world\"}]}"
                             )
             ]
         ]
