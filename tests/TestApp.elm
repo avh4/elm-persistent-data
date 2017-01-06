@@ -1,4 +1,4 @@
-module TestApp exposing (program)
+module TestApp exposing (Msg(..), program)
 
 import Html exposing (Html)
 import Html.Attributes

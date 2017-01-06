@@ -1,4 +1,4 @@
-module Persistence exposing (PersistenceModel, PersistenceMsg, program, PersistenceState(..), current)
+module Persistence exposing (PersistenceModel, PersistenceMsg, uimsg, program, PersistenceState(..), current)
 
 import Html exposing (Html)
 import Json.Decode exposing (Decoder)
@@ -70,6 +70,13 @@ type PersistenceMsg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe String))
     | ReadBatch String (Result String (Maybe String))
+
+
+{-| Not sure if this should be exposed... it's needed for testing, though
+-}
+uimsg : msg -> PersistenceMsg event msg
+uimsg =
+    UiMsg
 
 
 update :
