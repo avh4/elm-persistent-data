@@ -70,7 +70,8 @@ type PersistenceMsg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe String))
     | ReadBatch String (Result String (Maybe String))
-    | WriteBatch (Result String ())
+    | WriteBatch String (Result String ())
+    | WriteRoot (Result String ())
 
 
 {-| Not sure if this should be exposed... it's needed for testing, though
@@ -80,7 +81,12 @@ uimsg =
     UiMsg
 
 
-writeBatch : Config data event state msg -> List event -> Task String ()
+writeRoot : Config data event state msg -> String -> Task String ()
+writeRoot config lastBatchId =
+    config.write "root-v1" lastBatchId
+
+
+writeBatch : Config data event state msg -> List event -> Cmd (PersistenceMsg event msg)
 writeBatch config events =
     let
         json =
@@ -96,6 +102,7 @@ writeBatch config events =
             "sha256-" ++ Sha256.sha256 json
     in
         config.write key json
+            |> Task.attempt (WriteBatch key)
 
 
 update :
@@ -118,7 +125,6 @@ update config msg (PersistenceModel model) =
                         Just ev ->
                             ( config.update ev model.data
                             , writeBatch config [ ev ]
-                                |> Task.attempt WriteBatch
                             )
             in
                 ( PersistenceModel
@@ -178,13 +184,22 @@ update config msg (PersistenceModel model) =
             , Cmd.none
             )
 
-        WriteBatch (Ok ()) ->
+        WriteBatch batchId (Ok ()) ->
+            ( PersistenceModel model
+            , writeRoot config batchId
+                |> Task.attempt WriteRoot
+            )
+
+        WriteBatch batchId (Err _) ->
+            Debug.crash "TODO: WriteBatch Err"
+
+        WriteRoot (Ok ()) ->
             ( PersistenceModel model
             , Cmd.none
             )
 
-        WriteBatch (Err _) ->
-            Debug.crash "TODO: WriteBatch Err"
+        WriteRoot (Err _) ->
+            Debug.crash "TODO: WriteRoot Err"
 
 
 view :

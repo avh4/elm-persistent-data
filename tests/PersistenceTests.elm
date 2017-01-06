@@ -119,5 +119,31 @@ all =
                             , "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e"
                             , "{\"events\":[{\"tag\":\"AddItem\",\"$0\":\"world\"}]}"
                             )
+              -- TODO: when the batch fails
+            , test "when the batch succeeds, writes root" <|
+                -- TODO: pass expected current value
+                \() ->
+                    TestApp.program
+                        { read = \_ -> Task.succeed Nothing
+                        , write =
+                            \key value ->
+                                case ( key, value ) of
+                                    ( "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e", "{\"events\":[{\"tag\":\"AddItem\",\"$0\":\"world\"}]}" ) ->
+                                        Task.succeed ()
+
+                                    ( "root-v1", _ ) ->
+                                        TestContext.mockTask ( "write", key, value )
+
+                                    _ ->
+                                        Task.fail "Unexpected write in test"
+                        }
+                        |> TestContext.start
+                        |> TestContext.update (TestApp.Typed "world" |> Persistence.uimsg)
+                        |> TestContext.update (TestApp.Add |> Persistence.uimsg)
+                        |> TestContext.expectMockTask
+                            ( "write"
+                            , "root-v1"
+                            , "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e"
+                            )
             ]
         ]
