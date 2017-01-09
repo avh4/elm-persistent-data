@@ -186,12 +186,12 @@ all =
                 \() ->
                     start
                         |> foldResults
-                            [ updateUi (TestApp.Typed "world")
+                            [ resolveRead "root-v1" Nothing
+                            , updateUi (TestApp.Typed "world")
                             , updateUi (TestApp.Add)
                             ]
                         |> expectMockTask
-                            -- TODO: include parent in JSON
-                            (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}]}""")
+                            (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}],"parent":null}""")
               -- TODO: when the batch fails
             , test "when the batch succeeds, writes root" <|
                 \() ->
@@ -201,11 +201,24 @@ all =
                             , updateUi (TestApp.Typed "world")
                             , updateUi (TestApp.Add)
                             , TestContext.resolveMockTask
-                                (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}]}""")
-                                (Ok "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e")
+                                (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}],"parent":null}""")
+                                (Ok "sha256-fac6de7c836658da9d006a860e5affefe8e0fc2722c6a2326616a39722db0d37")
                             ]
                         |> expectMockTask
-                            (.writeRef >> (\f -> f "root-v1" Nothing "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e"))
-              -- TODO: write root correctly with a previous root
+                            (.writeRef >> (\f -> f "root-v1" Nothing "sha256-fac6de7c836658da9d006a860e5affefe8e0fc2722c6a2326616a39722db0d37"))
+            , test "with a previous root, sets the parent" <|
+                \() ->
+                    start
+                        |> foldResults
+                            [ resolveRead "root-v1" (Just "batch1")
+                            , resolveRead "batch1" (Just """{}""")
+                            , updateUi (TestApp.Typed "world")
+                            , updateUi (TestApp.Add)
+                            , TestContext.resolveMockTask
+                                (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}],"parent":"batch1"}""")
+                                (Ok "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397")
+                            ]
+                        |> expectMockTask
+                            (.writeRef >> (\f -> f "root-v1" (Just "batch1") "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397"))
             ]
         ]

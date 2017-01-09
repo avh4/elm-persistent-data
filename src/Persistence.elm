@@ -51,6 +51,7 @@ type Model data state
         { data : data
         , ui : state
         , loaded : Bool
+        , root : Maybe String
         , errors : List String
         }
 
@@ -63,6 +64,7 @@ init config =
         { data = config.initApp
         , ui = Tuple.first config.initUi
         , loaded = False
+        , root = Nothing
         , errors = []
         }
     , Cmd.batch
@@ -102,18 +104,23 @@ uimsg =
     UiMsg
 
 
-writeRoot : Config data event state msg -> String -> Task String ()
-writeRoot config lastBatchId =
-    config.storage.writeRef "root-v1" Nothing lastBatchId
+writeRoot : Config data event state msg -> Maybe String -> String -> Task String ()
+writeRoot config previousRoot lastBatchId =
+    config.storage.writeRef "root-v1" previousRoot lastBatchId
 
 
-writeBatch : Config data event state msg -> List event -> Cmd (Msg event msg)
-writeBatch config events =
+writeBatch : Config data event state msg -> Maybe String -> List event -> Cmd (Msg event msg)
+writeBatch config parent events =
     let
         json =
             [ ( "events"
               , List.map config.encoder events
                     |> Json.Encode.list
+              )
+            , ( "parent"
+              , parent
+                    |> Maybe.map Json.Encode.string
+                    |> Maybe.withDefault Json.Encode.null
               )
             ]
                 |> Json.Encode.object
@@ -145,7 +152,7 @@ update config msg (Model model) =
 
                         Just ev ->
                             ( config.update ev model.data
-                            , writeBatch config [ ev ]
+                            , writeBatch config model.root [ ev ]
                             )
             in
                 ( Model
@@ -158,12 +165,12 @@ update config msg (Model model) =
                 )
 
         ReadRoot (Ok Nothing) ->
-            ( Model { model | loaded = True }
+            ( Model { model | loaded = True, root = Nothing }
             , Cmd.none
             )
 
         ReadRoot (Ok (Just lastBatchName)) ->
-            ( Model model
+            ( Model { model | root = Just lastBatchName }
             , Task.attempt (ReadBatch lastBatchName) <| config.storage.read lastBatchName
             )
 
@@ -208,7 +215,7 @@ update config msg (Model model) =
         WriteBatch calculatedSha (Ok serverSha) ->
             -- TODO: verify serverSha matches what we calculated
             ( Model model
-            , writeRoot config calculatedSha
+            , writeRoot config model.root calculatedSha
                 |> Task.attempt WriteRoot
             )
 
