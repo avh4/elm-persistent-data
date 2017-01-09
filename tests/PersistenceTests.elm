@@ -5,6 +5,7 @@ import Expect exposing (Expectation)
 import TestContextWithMocks as TestContext exposing (TestContext, MockTask)
 import TestApp
 import Persistence
+import Sha256
 
 
 type alias Mocks =
@@ -49,6 +50,20 @@ resolveRead :
     -> Result String (TestContext Mocks model msg)
 resolveRead key value =
     TestContext.resolveMockTask (.read >> (|>) key) (Ok value)
+
+
+resolveWrite :
+    String
+    -> TestContext Mocks model msg
+    -> Result String (TestContext Mocks model msg)
+resolveWrite content =
+    let
+        key =
+            "sha256-" ++ Sha256.sha256 content
+    in
+        TestContext.resolveMockTask
+            (.writeContent >> (|>) content)
+            (Ok key)
 
 
 updateUi :
@@ -216,9 +231,7 @@ all =
                             [ resolveRead "root-v1" Nothing
                             , updateUi (TestApp.Typed "world")
                             , updateUi (TestApp.Add)
-                            , TestContext.resolveMockTask
-                                (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}],"parent":null}""")
-                                (Ok "sha256-fac6de7c836658da9d006a860e5affefe8e0fc2722c6a2326616a39722db0d37")
+                            , resolveWrite """{"events":[{"tag":"AddItem","$0":"world"}],"parent":null}"""
                             ]
                         |> expectMockTask
                             (.writeRef >> (\f -> f "root-v1" Nothing "sha256-fac6de7c836658da9d006a860e5affefe8e0fc2722c6a2326616a39722db0d37"))
@@ -230,9 +243,7 @@ all =
                             , resolveRead "batch1" (Just """{}""")
                             , updateUi (TestApp.Typed "world")
                             , updateUi (TestApp.Add)
-                            , TestContext.resolveMockTask
-                                (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}],"parent":"batch1"}""")
-                                (Ok "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397")
+                            , resolveWrite """{"events":[{"tag":"AddItem","$0":"world"}],"parent":"batch1"}"""
                             ]
                         |> expectMockTask
                             (.writeRef >> (\f -> f "root-v1" (Just "batch1") "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397"))
