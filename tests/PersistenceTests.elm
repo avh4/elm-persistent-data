@@ -2,11 +2,19 @@ module PersistenceTests exposing (all)
 
 import Test exposing (..)
 import Expect exposing (Expectation)
-import TestContextWithMocks as TestContext exposing (TestContext)
+import TestContextWithMocks as TestContext exposing (TestContext, MockTask)
 import TestApp
 import Persistence
 
 
+type alias Mocks =
+    { read : String -> MockTask String (Maybe String)
+    , writeContent : String -> MockTask String String
+    , writeRef : String -> Maybe String -> String -> MockTask String ()
+    }
+
+
+start : TestContext Mocks (Persistence.Model TestApp.Data TestApp.UiState) (Persistence.Msg TestApp.Event TestApp.Msg)
 start =
     TestContext.start
         (\mocks ->
@@ -34,10 +42,19 @@ start =
         )
 
 
+resolveRead :
+    String
+    -> Maybe String
+    -> TestContext Mocks model msg
+    -> Result String (TestContext Mocks model msg)
 resolveRead key value =
     TestContext.resolveMockTask (.read >> (|>) key) (Ok value)
 
 
+updateUi :
+    msg
+    -> TestContext mocks model (Persistence.Msg event msg)
+    -> Result error (TestContext mocks model (Persistence.Msg event msg))
 updateUi uiMsg =
     TestContext.update (uiMsg |> Persistence.uimsg) >> Ok
 
@@ -70,10 +87,18 @@ foldResults steps init =
     List.foldl (\f a -> Result.andThen f a) (Ok init) steps
 
 
+expectMockTask :
+    (mocks -> MockTask x a)
+    -> Result x1 (TestContext mocks model msg)
+    -> Expectation
 expectMockTask =
     TestContext.expectMockTask >> expectOk
 
 
+expectCurrent :
+    Persistence.PersistenceState data ui
+    -> Result x (TestContext mocks (Persistence.Model data ui) msg)
+    -> Expectation
 expectCurrent expected =
     expectOk
         (TestContext.model

@@ -1,4 +1,15 @@
-module Persistence exposing (PersistenceModel, PersistenceMsg, uimsg, program, PersistenceState(..), current)
+module Persistence
+    exposing
+        ( Program
+        , Storage
+        , Config
+        , Model
+        , Msg
+        , uimsg
+        , program
+        , PersistenceState(..)
+        , current
+        )
 
 import Html exposing (Html)
 import Json.Decode exposing (Decoder)
@@ -18,7 +29,12 @@ type alias Config data event state msg =
     , errorView : List String -> Html Never
     , decoder : Decoder event
     , encoder : event -> Json.Encode.Value
-    , read : String -> Task String (Maybe String)
+    , storage : Storage
+    }
+
+
+type alias Storage =
+    { read : String -> Task String (Maybe String)
     , writeContent : String -> Task String String
     , writeRef :
         String -> Maybe String -> String -> Task String ()
@@ -26,8 +42,12 @@ type alias Config data event state msg =
     }
 
 
-type PersistenceModel data state
-    = PersistenceModel
+type alias Program flags data event state msg =
+    Platform.Program flags (Model data state) (Msg event msg)
+
+
+type Model data state
+    = Model
         { data : data
         , ui : state
         , loaded : Bool
@@ -37,9 +57,9 @@ type PersistenceModel data state
 
 init :
     Config data event state msg
-    -> ( PersistenceModel data state, Cmd (PersistenceMsg event msg) )
+    -> ( Model data state, Cmd (Msg event msg) )
 init config =
-    ( PersistenceModel
+    ( Model
         { data = config.initApp
         , ui = Tuple.first config.initUi
         , loaded = False
@@ -47,7 +67,7 @@ init config =
         }
     , Cmd.batch
         [ Cmd.map UiMsg (Tuple.second config.initUi)
-        , Task.attempt ReadRoot <| config.read "root-v1"
+        , Task.attempt ReadRoot <| config.storage.read "root-v1"
         ]
     )
 
@@ -57,8 +77,8 @@ type PersistenceState data ui
     | Ready data ui
 
 
-current : PersistenceModel data ui -> PersistenceState data ui
-current (PersistenceModel model) =
+current : Model data ui -> PersistenceState data ui
+current (Model model) =
     case model.loaded of
         False ->
             Loading
@@ -67,7 +87,7 @@ current (PersistenceModel model) =
             Ready model.data model.ui
 
 
-type PersistenceMsg event msg
+type Msg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe String))
     | ReadBatch String (Result String (Maybe String))
@@ -77,17 +97,17 @@ type PersistenceMsg event msg
 
 {-| Not sure if this should be exposed... it's needed for testing, though
 -}
-uimsg : msg -> PersistenceMsg event msg
+uimsg : msg -> Msg event msg
 uimsg =
     UiMsg
 
 
 writeRoot : Config data event state msg -> String -> Task String ()
 writeRoot config lastBatchId =
-    config.writeRef "root-v1" Nothing lastBatchId
+    config.storage.writeRef "root-v1" Nothing lastBatchId
 
 
-writeBatch : Config data event state msg -> List event -> Cmd (PersistenceMsg event msg)
+writeBatch : Config data event state msg -> List event -> Cmd (Msg event msg)
 writeBatch config events =
     let
         json =
@@ -102,16 +122,16 @@ writeBatch config events =
         key =
             "sha256-" ++ Sha256.sha256 json
     in
-        config.writeContent json
+        config.storage.writeContent json
             |> Task.attempt (WriteBatch key)
 
 
 update :
     Config data event state msg
-    -> PersistenceMsg event msg
-    -> PersistenceModel data state
-    -> ( PersistenceModel data state, Cmd (PersistenceMsg event msg) )
-update config msg (PersistenceModel model) =
+    -> Msg event msg
+    -> Model data state
+    -> ( Model data state, Cmd (Msg event msg) )
+update config msg (Model model) =
     case msg of
         UiMsg m ->
             let
@@ -128,7 +148,7 @@ update config msg (PersistenceModel model) =
                             , writeBatch config [ ev ]
                             )
             in
-                ( PersistenceModel
+                ( Model
                     { model
                         | ui = newUi
                         , data = newData
@@ -138,17 +158,17 @@ update config msg (PersistenceModel model) =
                 )
 
         ReadRoot (Ok Nothing) ->
-            ( PersistenceModel { model | loaded = True }
+            ( Model { model | loaded = True }
             , Cmd.none
             )
 
         ReadRoot (Ok (Just lastBatchName)) ->
-            ( PersistenceModel model
-            , Task.attempt (ReadBatch lastBatchName) <| config.read lastBatchName
+            ( Model model
+            , Task.attempt (ReadBatch lastBatchName) <| config.storage.read lastBatchName
             )
 
         ReadRoot (Err message) ->
-            ( PersistenceModel
+            ( Model
                 { model
                     | errors = ("Error reading root: " ++ message) :: model.errors
                 }
@@ -158,7 +178,7 @@ update config msg (PersistenceModel model) =
         ReadBatch id (Ok (Just batchJson)) ->
             case Json.Decode.decodeString (Json.Decode.field "events" <| Json.Decode.list config.decoder) batchJson of
                 Ok events ->
-                    ( PersistenceModel
+                    ( Model
                         { model
                             | loaded = True
                             , data = List.foldl config.update model.data events
@@ -167,7 +187,7 @@ update config msg (PersistenceModel model) =
                     )
 
                 Err message ->
-                    ( PersistenceModel
+                    ( Model
                         { model
                             | errors = ("Error decoding batch " ++ id ++ ": " ++ message) :: model.errors
                         }
@@ -178,7 +198,7 @@ update config msg (PersistenceModel model) =
             Debug.crash "TODO: this is a fatal loading error; a known batch of events is missing"
 
         ReadBatch id (Err message) ->
-            ( PersistenceModel
+            ( Model
                 { model
                     | errors = ("Error reading batch " ++ id ++ ": " ++ message) :: model.errors
                 }
@@ -187,7 +207,7 @@ update config msg (PersistenceModel model) =
 
         WriteBatch calculatedSha (Ok serverSha) ->
             -- TODO: verify serverSha matches what we calculated
-            ( PersistenceModel model
+            ( Model model
             , writeRoot config calculatedSha
                 |> Task.attempt WriteRoot
             )
@@ -196,7 +216,7 @@ update config msg (PersistenceModel model) =
             Debug.crash "TODO: WriteBatch Err"
 
         WriteRoot (Ok ()) ->
-            ( PersistenceModel model
+            ( Model model
             , Cmd.none
             )
 
@@ -206,9 +226,9 @@ update config msg (PersistenceModel model) =
 
 view :
     Config data event state msg
-    -> PersistenceModel data state
-    -> Html (PersistenceMsg event msg)
-view config (PersistenceModel model) =
+    -> Model data state
+    -> Html (Msg event msg)
+view config (Model model) =
     if model.errors /= [] then
         Html.map never (config.errorView model.errors)
     else if model.loaded == False then
@@ -220,7 +240,7 @@ view config (PersistenceModel model) =
 
 program :
     Config data event state msg
-    -> Program Never (PersistenceModel data state) (PersistenceMsg event msg)
+    -> Program Never data event state msg
 program config =
     Html.program
         { init = init config

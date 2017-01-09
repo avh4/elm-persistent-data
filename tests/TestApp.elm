@@ -1,4 +1,4 @@
-module TestApp exposing (Msg(..), program)
+module TestApp exposing (Data, Event, UiState, Msg(..), program)
 
 import Html exposing (Html)
 import Html.Attributes
@@ -97,7 +97,8 @@ view data state =
         ]
 
 
-program { read, writeContent, writeRef } =
+program : Persistence.Storage -> Persistence.Program Never Data Event UiState Msg
+program storage =
     Persistence.program
         { initApp = { list = [] }
         , initUi = ( { input = "" }, Cmd.none )
@@ -114,12 +115,11 @@ program { read, writeContent, writeRef } =
                     ]
         , decoder = decoder
         , encoder = encoder
-        , read = read
-        , writeContent = writeContent
-        , writeRef = writeRef
+        , storage = storage
         }
 
 
+main : Persistence.Program Never Data Event UiState Msg
 main =
     program
         { read =
