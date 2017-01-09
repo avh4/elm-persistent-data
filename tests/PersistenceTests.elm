@@ -133,7 +133,7 @@ all =
                 \() ->
                     testResults start
                         [ resolveRead "root-v1" (Just "batch1")
-                        , resolveRead "batch1" (Just """{"events":[{"tag":"AddItem","$0":"hello"}]}""")
+                        , resolveRead "batch1" (Just """{"events":[{"tag":"AddItem","$0":"hello"}],"parent":null}""")
                         ]
                         (TestContext.model
                             >> Persistence.current
@@ -144,12 +144,28 @@ all =
                                 )
                         )
               -- TODO: verify ordering of event replay
-              -- TODO: multiple initial batches
-              -- TODO: someday: with cached reduction
               -- TODO: error loading root
               -- TODO: error loading batch
               -- TODO: batch doesn't exist (fatal error)
               -- TODO: error decoding batch JSON
+            , test "with previous data in multiple batches, when load succeeds, shows previous data" <|
+                \() ->
+                    testResults start
+                        [ resolveRead "root-v1" (Just "batch2")
+                        , resolveRead "batch2" (Just """{"events":[{"tag":"AddItem","$0":"world"}],"parent":"batch1"}""")
+                        , resolveRead "batch1" (Just """{"events":[{"tag":"AddItem","$0":"hello"}],"parent":null}""")
+                        ]
+                        (TestContext.model
+                            >> Persistence.current
+                            >> Expect.equal
+                                (Persistence.Ready
+                                    { list = [ "world", "hello" ] }
+                                    { input = "" }
+                                )
+                        )
+              -- TODO: should be in Loading state until all batches finish
+              -- TODO: error loading second batch fails
+              -- TODO: someday: with cached reduction
             ]
         , describe "update"
             [ test "UI messages should update the UI state" <|
@@ -220,5 +236,7 @@ all =
                             ]
                         |> expectMockTask
                             (.writeRef >> (\f -> f "root-v1" (Just "batch1") "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397"))
+              -- TODO: after writing, our current root should be updated
+              -- TODO: a new event happens before writing finishes
             ]
         ]

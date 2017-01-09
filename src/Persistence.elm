@@ -16,6 +16,7 @@ import Json.Decode exposing (Decoder)
 import Json.Encode
 import Task exposing (Task)
 import Sha256
+import Persistence.Batch as Batch
 
 
 type alias Config data event state msg =
@@ -92,7 +93,7 @@ current (Model model) =
 type Msg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe String))
-    | ReadBatch String (Result String (Maybe String))
+    | ReadBatch String (List (List event)) (Result String (Maybe String))
     | WriteBatch String (Result String String)
     | WriteRoot (Result String ())
 
@@ -109,21 +110,16 @@ writeRoot config previousRoot lastBatchId =
     config.storage.writeRef "root-v1" previousRoot lastBatchId
 
 
+readBatch : Config data event state msg -> String -> List (List event) -> Cmd (Msg event msg)
+readBatch config batch whenDone =
+    Task.attempt (ReadBatch batch whenDone) <| config.storage.read batch
+
+
 writeBatch : Config data event state msg -> Maybe String -> List event -> Cmd (Msg event msg)
 writeBatch config parent events =
     let
         json =
-            [ ( "events"
-              , List.map config.encoder events
-                    |> Json.Encode.list
-              )
-            , ( "parent"
-              , parent
-                    |> Maybe.map Json.Encode.string
-                    |> Maybe.withDefault Json.Encode.null
-              )
-            ]
-                |> Json.Encode.object
+            Batch.encoder config.encoder { events = events, parent = parent }
                 |> Json.Encode.encode 0
 
         key =
@@ -171,7 +167,7 @@ update config msg (Model model) =
 
         ReadRoot (Ok (Just lastBatchName)) ->
             ( Model { model | root = Just lastBatchName }
-            , Task.attempt (ReadBatch lastBatchName) <| config.storage.read lastBatchName
+            , readBatch config lastBatchName []
             )
 
         ReadRoot (Err message) ->
@@ -182,16 +178,24 @@ update config msg (Model model) =
             , Cmd.none
             )
 
-        ReadBatch id (Ok (Just batchJson)) ->
-            case Json.Decode.decodeString (Json.Decode.field "events" <| Json.Decode.list config.decoder) batchJson of
-                Ok events ->
-                    ( Model
-                        { model
-                            | loaded = True
-                            , data = List.foldl config.update model.data events
-                        }
-                    , Cmd.none
-                    )
+        ReadBatch id whenDone (Ok (Just batchJson)) ->
+            case Json.Decode.decodeString (Batch.decoder config.decoder) batchJson of
+                Ok batch ->
+                    case batch.parent of
+                        Nothing ->
+                            ( Model
+                                { model
+                                    | loaded = True
+                                    , data =
+                                        (batch.events :: whenDone)
+                                            |> List.concat
+                                            |> List.foldl config.update model.data
+                                }
+                            , Cmd.none
+                            )
+
+                        Just parent ->
+                            ( Model model, readBatch config parent (batch.events :: whenDone) )
 
                 Err message ->
                     ( Model
@@ -201,10 +205,10 @@ update config msg (Model model) =
                     , Cmd.none
                     )
 
-        ReadBatch _ (Ok Nothing) ->
+        ReadBatch _ _ (Ok Nothing) ->
             Debug.crash "TODO: this is a fatal loading error; a known batch of events is missing"
 
-        ReadBatch id (Err message) ->
+        ReadBatch id _ (Err message) ->
             ( Model
                 { model
                     | errors = ("Error reading batch " ++ id ++ ": " ++ message) :: model.errors
