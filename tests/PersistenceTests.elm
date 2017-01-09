@@ -191,7 +191,7 @@ all =
                             ]
                         |> expectMockTask
                             -- TODO: include parent in JSON
-                            (.writeContent >> (|>) "{\"events\":[{\"tag\":\"AddItem\",\"$0\":\"world\"}]}")
+                            (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}]}""")
               -- TODO: when the batch fails
             , test "when the batch succeeds, writes root" <|
                 \() ->
@@ -201,7 +201,7 @@ all =
                             , updateUi (TestApp.Typed "world")
                             , updateUi (TestApp.Add)
                             , TestContext.resolveMockTask
-                                (.writeContent >> (|>) "{\"events\":[{\"tag\":\"AddItem\",\"$0\":\"world\"}]}")
+                                (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}]}""")
                                 (Ok "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e")
                             ]
                         |> expectMockTask
