@@ -1,12 +1,85 @@
 module PersistenceTests exposing (all)
 
 import Test exposing (..)
-import Expect
-import TestContext exposing (TestContext)
+import Expect exposing (Expectation)
+import TestContextWithMocks as TestContext exposing (TestContext)
 import TestApp
 import Persistence
-import Task
-import Process
+
+
+start =
+    TestContext.start
+        (\mocks ->
+            TestApp.program
+                { read =
+                    mocks.read >> TestContext.toTask
+                , writeContent =
+                    mocks.writeContent >> TestContext.toTask
+                , writeRef =
+                    \a b c ->
+                        TestContext.toTask (mocks.writeRef a b c)
+                }
+        )
+        (\token ->
+            { read =
+                \key ->
+                    TestContext.mockTask token ("read:" ++ key)
+            , writeContent =
+                \content ->
+                    TestContext.mockTask token ("writeContent:" ++ content)
+            , writeRef =
+                \key old new ->
+                    TestContext.mockTask token ("writeRef:" ++ key ++ ":" ++ toString old ++ ":" ++ new)
+            }
+        )
+
+
+resolveRead key value =
+    TestContext.resolveMockTask (.read >> (|>) key) (Ok value)
+
+
+updateUi uiMsg =
+    TestContext.update (uiMsg |> Persistence.uimsg) >> Ok
+
+
+expectOk : (a -> Expectation) -> Result x a -> Expectation
+expectOk expectation result =
+    case result of
+        Err x ->
+            [ toString result
+            , "╷"
+            , "│ expectOk"
+            , "╵"
+            , "Ok _"
+            ]
+                |> String.join "\n"
+                |> Expect.fail
+
+        Ok a ->
+            expectation a
+
+
+testResults : a -> List (a -> Result x a) -> (a -> Expectation) -> Expectation
+testResults init steps expect =
+    List.foldl (\f a -> Result.andThen f a) (Ok init) steps
+        |> expectOk expect
+
+
+foldResults : List (a -> Result x a) -> a -> Result x a
+foldResults steps init =
+    List.foldl (\f a -> Result.andThen f a) (Ok init) steps
+
+
+expectMockTask =
+    TestContext.expectMockTask >> expectOk
+
+
+expectCurrent expected =
+    expectOk
+        (TestContext.model
+            >> Persistence.current
+            >> Expect.equal expected
+        )
 
 
 all : Test
@@ -14,53 +87,37 @@ all =
     describe "Persistence"
         [ test "initially shows loading view" <|
             \() ->
-                TestApp.program
-                    { read = \_ -> Task.map (always <| Nothing) <| Process.sleep 999
-                    , write = \_ _ -> Task.succeed ()
-                    }
-                    |> TestContext.start
+                start
                     |> TestContext.model
                     |> Persistence.current
                     |> Expect.equal Persistence.Loading
         , describe "initial loading"
             [ test "with no previous data, when load succeeds, shows initial state" <|
                 \() ->
-                    TestApp.program
-                        { read = \_ -> Task.succeed Nothing
-                        , write = \_ _ -> Task.succeed ()
-                        }
-                        |> TestContext.start
-                        |> TestContext.model
-                        |> Persistence.current
-                        |> Expect.equal
-                            (Persistence.Ready
-                                { list = [] }
-                                { input = "" }
-                            )
+                    testResults start
+                        [ resolveRead "root-v1" Nothing ]
+                        (TestContext.model
+                            >> Persistence.current
+                            >> Expect.equal
+                                (Persistence.Ready
+                                    { list = [] }
+                                    { input = "" }
+                                )
+                        )
             , test "with previous data in a single batch, when load succeeds, shows previous data" <|
                 \() ->
-                    TestApp.program
-                        { read =
-                            \key ->
-                                case key of
-                                    "root-v1" ->
-                                        Task.succeed (Just "batch1")
-
-                                    "batch1" ->
-                                        Task.succeed (Just """{"events":[{"tag":"AddItem","$0":"hello"}]}""")
-
-                                    _ ->
-                                        Task.succeed Nothing
-                        , write = \_ _ -> Task.succeed ()
-                        }
-                        |> TestContext.start
-                        |> TestContext.model
-                        |> Persistence.current
-                        |> Expect.equal
-                            (Persistence.Ready
-                                { list = [ "hello" ] }
-                                { input = "" }
-                            )
+                    testResults start
+                        [ resolveRead "root-v1" (Just "batch1")
+                        , resolveRead "batch1" (Just """{"events":[{"tag":"AddItem","$0":"hello"}]}""")
+                        ]
+                        (TestContext.model
+                            >> Persistence.current
+                            >> Expect.equal
+                                (Persistence.Ready
+                                    { list = [ "hello" ] }
+                                    { input = "" }
+                                )
+                        )
               -- TODO: verify ordering of event replay
               -- TODO: multiple initial batches
               -- TODO: someday: with cached reduction
@@ -72,31 +129,28 @@ all =
         , describe "update"
             [ test "UI messages should update the UI state" <|
                 \() ->
-                    TestApp.program
-                        { read = \_ -> Task.succeed Nothing
-                        , write = \_ _ -> Task.succeed ()
-                        }
-                        |> TestContext.start
-                        |> TestContext.update (TestApp.Typed "world" |> Persistence.uimsg)
-                        |> TestContext.model
-                        |> Persistence.current
-                        |> Expect.equal
-                            (Persistence.Ready
-                                { list = [] }
-                                { input = "world" }
-                            )
+                    testResults
+                        start
+                        [ resolveRead "root-v1" Nothing
+                        , updateUi (TestApp.Typed "world")
+                        ]
+                        (TestContext.model
+                            >> Persistence.current
+                            >> Expect.equal
+                                (Persistence.Ready
+                                    { list = [] }
+                                    { input = "world" }
+                                )
+                        )
             , test "when an event is produced, it updates the app data" <|
                 \() ->
-                    TestApp.program
-                        { read = \_ -> Task.succeed Nothing
-                        , write = \_ _ -> Task.succeed ()
-                        }
-                        |> TestContext.start
-                        |> TestContext.update (TestApp.Typed "world" |> Persistence.uimsg)
-                        |> TestContext.update (TestApp.Add |> Persistence.uimsg)
-                        |> TestContext.model
-                        |> Persistence.current
-                        |> Expect.equal
+                    start
+                        |> foldResults
+                            [ resolveRead "root-v1" Nothing
+                            , updateUi (TestApp.Typed "world")
+                            , updateUi (TestApp.Add)
+                            ]
+                        |> expectCurrent
                             (Persistence.Ready
                                 { list = [ "world" ] }
                                 { input = "" }
@@ -105,45 +159,28 @@ all =
         , describe "writing a new event"
             [ test "initiates the write" <|
                 \() ->
-                    TestApp.program
-                        { read = \_ -> Task.succeed Nothing
-                        , write =
-                            \key value ->
-                                TestContext.mockTask ( "write", key, value )
-                        }
-                        |> TestContext.start
-                        |> TestContext.update (TestApp.Typed "world" |> Persistence.uimsg)
-                        |> TestContext.update (TestApp.Add |> Persistence.uimsg)
-                        |> TestContext.expectMockTask
-                            ( "write"
-                            , "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e"
-                            , "{\"events\":[{\"tag\":\"AddItem\",\"$0\":\"world\"}]}"
-                            )
+                    start
+                        |> foldResults
+                            [ updateUi (TestApp.Typed "world")
+                            , updateUi (TestApp.Add)
+                            ]
+                        |> expectMockTask
+                            -- TODO: include parent in JSON
+                            (.writeContent >> (|>) "{\"events\":[{\"tag\":\"AddItem\",\"$0\":\"world\"}]}")
               -- TODO: when the batch fails
             , test "when the batch succeeds, writes root" <|
-                -- TODO: pass expected current value
                 \() ->
-                    TestApp.program
-                        { read = \_ -> Task.succeed Nothing
-                        , write =
-                            \key value ->
-                                case ( key, value ) of
-                                    ( "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e", "{\"events\":[{\"tag\":\"AddItem\",\"$0\":\"world\"}]}" ) ->
-                                        Task.succeed ()
-
-                                    ( "root-v1", _ ) ->
-                                        TestContext.mockTask ( "write", key, value )
-
-                                    _ ->
-                                        Task.fail "Unexpected write in test"
-                        }
-                        |> TestContext.start
-                        |> TestContext.update (TestApp.Typed "world" |> Persistence.uimsg)
-                        |> TestContext.update (TestApp.Add |> Persistence.uimsg)
-                        |> TestContext.expectMockTask
-                            ( "write"
-                            , "root-v1"
-                            , "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e"
-                            )
+                    start
+                        |> foldResults
+                            [ resolveRead "root-v1" Nothing
+                            , updateUi (TestApp.Typed "world")
+                            , updateUi (TestApp.Add)
+                            , TestContext.resolveMockTask
+                                (.writeContent >> (|>) "{\"events\":[{\"tag\":\"AddItem\",\"$0\":\"world\"}]}")
+                                (Ok "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e")
+                            ]
+                        |> expectMockTask
+                            (.writeRef >> (\f -> f "root-v1" Nothing "sha256-202d7ef7d01b4f103ca3e78536d82ed5bfdb57f31ee8588fe1f64e3fc70ab46e"))
+              -- TODO: write root correctly with a previous root
             ]
         ]

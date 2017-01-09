@@ -8,6 +8,7 @@ import Task
 import Json.Decode
 import Json.Encode
 import Http
+import Sha256
 
 
 type alias Data =
@@ -96,7 +97,7 @@ view data state =
         ]
 
 
-program { read, write } =
+program { read, writeContent, writeRef } =
     Persistence.program
         { initApp = { list = [] }
         , initUi = ( { input = "" }, Cmd.none )
@@ -114,7 +115,8 @@ program { read, write } =
         , decoder = decoder
         , encoder = encoder
         , read = read
-        , write = write
+        , writeContent = writeContent
+        , writeRef = writeRef
         }
 
 
@@ -126,17 +128,43 @@ main =
                     |> Http.toTask
                     |> Task.map Just
                     |> Task.mapError toString
-        , write =
-            \key blob ->
+        , writeContent =
+            \blob ->
+                let
+                    key =
+                        "sha256-" ++ Sha256.sha256 blob
+                in
+                    Http.request
+                        { method = "PUT"
+                        , headers = []
+                        , url = ("/" ++ key)
+                        , body = Http.stringBody "application/octet-stream" blob
+                        , expect = Http.expectStringResponse (\_ -> Ok ())
+                        , timeout = Nothing
+                        , withCredentials = False
+                        }
+                        |> Http.toTask
+                        |> Task.map (always key)
+                        |> Task.mapError toString
+        , writeRef =
+            \key oldValue newValue ->
                 Http.request
                     { method = "PUT"
-                    , headers = []
+                    , headers =
+                        [ case oldValue of
+                            Nothing ->
+                                Http.header "x-if-empty" "true"
+
+                            Just val ->
+                                Http.header "x-if-match" val
+                        ]
                     , url = ("/" ++ key)
-                    , body = Http.stringBody "application/octet-stream" blob
+                    , body = Http.stringBody "application/octet-stream" newValue
                     , expect = Http.expectStringResponse (\_ -> Ok ())
                     , timeout = Nothing
                     , withCredentials = False
                     }
                     |> Http.toTask
+                    |> Task.map (always ())
                     |> Task.mapError toString
         }

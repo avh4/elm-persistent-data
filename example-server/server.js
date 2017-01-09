@@ -33,6 +33,7 @@ function handleRequest (request, response) {
       }
     })
   } else if (request.method === 'PUT') {
+    // TODO: validate x-if-empty, x-if-match headers for refs
     fs.open(key, 'w', function (err, fd) {
       if (err) {
         response.writeHead(500)

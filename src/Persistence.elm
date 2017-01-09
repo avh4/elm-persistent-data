@@ -19,9 +19,10 @@ type alias Config data event state msg =
     , decoder : Decoder event
     , encoder : event -> Json.Encode.Value
     , read : String -> Task String (Maybe String)
-    , write :
-        String -> String -> Task String ()
-        -- , maxBatchSize/maxBlobSize : Int
+    , writeContent : String -> Task String String
+    , writeRef :
+        String -> Maybe String -> String -> Task String ()
+        -- , maxBlobSize : Int
     }
 
 
@@ -70,7 +71,7 @@ type PersistenceMsg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe String))
     | ReadBatch String (Result String (Maybe String))
-    | WriteBatch String (Result String ())
+    | WriteBatch String (Result String String)
     | WriteRoot (Result String ())
 
 
@@ -83,7 +84,7 @@ uimsg =
 
 writeRoot : Config data event state msg -> String -> Task String ()
 writeRoot config lastBatchId =
-    config.write "root-v1" lastBatchId
+    config.writeRef "root-v1" Nothing lastBatchId
 
 
 writeBatch : Config data event state msg -> List event -> Cmd (PersistenceMsg event msg)
@@ -101,7 +102,7 @@ writeBatch config events =
         key =
             "sha256-" ++ Sha256.sha256 json
     in
-        config.write key json
+        config.writeContent json
             |> Task.attempt (WriteBatch key)
 
 
@@ -184,9 +185,10 @@ update config msg (PersistenceModel model) =
             , Cmd.none
             )
 
-        WriteBatch batchId (Ok ()) ->
+        WriteBatch calculatedSha (Ok serverSha) ->
+            -- TODO: verify serverSha matches what we calculated
             ( PersistenceModel model
-            , writeRoot config batchId
+            , writeRoot config calculatedSha
                 |> Task.attempt WriteRoot
             )
 
