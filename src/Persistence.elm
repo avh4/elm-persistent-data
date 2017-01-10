@@ -1,7 +1,6 @@
 module Persistence
     exposing
         ( Program
-        , Storage
         , Config
         , Model
         , Msg
@@ -17,6 +16,7 @@ import Json.Encode
 import Task exposing (Task)
 import Sha256
 import Persistence.Batch as Batch
+import Storage exposing (Storage)
 
 
 type alias Config data event state msg =
@@ -31,15 +31,6 @@ type alias Config data event state msg =
     , decoder : Decoder event
     , encoder : event -> Json.Encode.Value
     , storage : Storage
-    }
-
-
-type alias Storage =
-    { read : String -> Task String (Maybe String)
-    , writeContent : String -> Task String String
-    , writeRef :
-        String -> Maybe String -> String -> Task String ()
-        -- , maxBlobSize : Int
     }
 
 

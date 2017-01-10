@@ -4,11 +4,10 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Persistence
-import Task
 import Json.Decode
 import Json.Encode
-import Http
-import Sha256
+import Storage exposing (Storage)
+import Storage.ExampleServer
 
 
 type alias Data =
@@ -97,7 +96,7 @@ view data state =
         ]
 
 
-program : Persistence.Storage -> Persistence.Program Never Data Event UiState Msg
+program : Storage -> Persistence.Program Never Data Event UiState Msg
 program storage =
     Persistence.program
         { initApp = { list = [] }
@@ -121,50 +120,4 @@ program storage =
 
 main : Persistence.Program Never Data Event UiState Msg
 main =
-    program
-        { read =
-            \key ->
-                Http.getString ("/" ++ key)
-                    |> Http.toTask
-                    |> Task.map Just
-                    |> Task.mapError toString
-        , writeContent =
-            \blob ->
-                let
-                    key =
-                        "sha256-" ++ Sha256.sha256 blob
-                in
-                    Http.request
-                        { method = "PUT"
-                        , headers = []
-                        , url = ("/" ++ key)
-                        , body = Http.stringBody "application/octet-stream" blob
-                        , expect = Http.expectStringResponse (\_ -> Ok ())
-                        , timeout = Nothing
-                        , withCredentials = False
-                        }
-                        |> Http.toTask
-                        |> Task.map (always key)
-                        |> Task.mapError toString
-        , writeRef =
-            \key oldValue newValue ->
-                Http.request
-                    { method = "PUT"
-                    , headers =
-                        [ case oldValue of
-                            Nothing ->
-                                Http.header "x-if-empty" "true"
-
-                            Just val ->
-                                Http.header "x-if-match" val
-                        ]
-                    , url = ("/" ++ key)
-                    , body = Http.stringBody "application/octet-stream" newValue
-                    , expect = Http.expectStringResponse (\_ -> Ok ())
-                    , timeout = Nothing
-                    , withCredentials = False
-                    }
-                    |> Http.toTask
-                    |> Task.map (always ())
-                    |> Task.mapError toString
-        }
+    program Storage.ExampleServer.storage
