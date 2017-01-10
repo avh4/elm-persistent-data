@@ -258,25 +258,25 @@ all =
                         |> foldResults
                             [ resolveRead
                                 "root-v1"
-                                (Just "sha-476a96716227f6fc286ce2d87174e214ccb62e40")
+                                (Just "sha-5f115dc5ad57198459201ab92cee7b3cf8c85a12050e359a12a2a0dd2e59ca6d")
                             , resolveRead
-                                "sha-476a96716227f6fc286ce2d87174e214ccb62e40"
+                                "sha-5f115dc5ad57198459201ab92cee7b3cf8c85a12050e359a12a2a0dd2e59ca6d"
                                 (Just """{"events":[],"parent":null}""")
                             , updateUi (TestApp.Typed "buy carrots")
                             , updateUi (TestApp.Add)
                             , resolveWrite
-                                """{"events":[{"tag":"AddItem","$0":"buy carrots"}],"parent":"sha-476a96716227f6fc286ce2d87174e214ccb62e40"}"""
+                                """{"events":[{"tag":"AddItem","$0":"buy carrots"}],"parent":"sha-5f115dc5ad57198459201ab92cee7b3cf8c85a12050e359a12a2a0dd2e59ca6d"}"""
                             , resolveWriteRef
                                 "root-v1"
-                                (Just "sha-476a96716227f6fc286ce2d87174e214ccb62e40")
-                                "sha256-21d8798f67e484a638b94355ddbf710f1778b2e98bf72ce08100ce4f0345459d"
+                                (Just "sha-5f115dc5ad57198459201ab92cee7b3cf8c85a12050e359a12a2a0dd2e59ca6d")
+                                "sha256-be598eb60eb3dbfdb3d974b513be6e8cdbb40ebece2c0372d6e5c245f5d20181"
                             , updateUi (TestApp.Typed "check cookies")
                             , updateUi (TestApp.Add)
                             , resolveWrite
-                                """{"events":[{"tag":"AddItem","$0":"check cookies"}],"parent":"sha256-21d8798f67e484a638b94355ddbf710f1778b2e98bf72ce08100ce4f0345459d"}"""
+                                """{"events":[{"tag":"AddItem","$0":"check cookies"}],"parent":"sha256-be598eb60eb3dbfdb3d974b513be6e8cdbb40ebece2c0372d6e5c245f5d20181"}"""
                             ]
                         |> expectMockTask
-                            (.writeRef >> (\f -> f "root-v1" (Just "sha256-21d8798f67e484a638b94355ddbf710f1778b2e98bf72ce08100ce4f0345459d") "sha256-a6373a7147c1d4379bb9f52cff3fb4d27aa8425fc7774aac26b954ff951a193a"))
+                            (.writeRef >> (\f -> f "root-v1" (Just "sha256-be598eb60eb3dbfdb3d974b513be6e8cdbb40ebece2c0372d6e5c245f5d20181") "sha256-fe9b0bdd507045f9b12b25cbbff5f612ecf0ed2ca5e06cb582990ddae69b76ec"))
               -- TODO: a new event happens before writing finishes
             ]
         ]
