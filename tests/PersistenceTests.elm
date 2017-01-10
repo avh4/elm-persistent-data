@@ -256,22 +256,27 @@ all =
                 \() ->
                     start
                         |> foldResults
-                            [ resolveRead "root-v1" (Just "batch1")
-                            , resolveRead "batch1" (Just """{"events":[],"parent":null}""")
-                            , updateUi (TestApp.Typed "world")
-                            , updateUi (TestApp.Add)
-                            , resolveWrite """{"events":[{"tag":"AddItem","$0":"world"}],"parent":"batch1"}"""
-                            , resolveWriteRef
+                            [ resolveRead
                                 "root-v1"
-                                (Just "batch1")
-                                "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397"
-                            , updateUi (TestApp.Typed "again")
+                                (Just "sha-476a96716227f6fc286ce2d87174e214ccb62e40")
+                            , resolveRead
+                                "sha-476a96716227f6fc286ce2d87174e214ccb62e40"
+                                (Just """{"events":[],"parent":null}""")
+                            , updateUi (TestApp.Typed "buy carrots")
                             , updateUi (TestApp.Add)
                             , resolveWrite
-                                """{"events":[{"tag":"AddItem","$0":"again"}],"parent":"sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397"}"""
+                                """{"events":[{"tag":"AddItem","$0":"buy carrots"}],"parent":"sha-476a96716227f6fc286ce2d87174e214ccb62e40"}"""
+                            , resolveWriteRef
+                                "root-v1"
+                                (Just "sha-476a96716227f6fc286ce2d87174e214ccb62e40")
+                                "sha256-21d8798f67e484a638b94355ddbf710f1778b2e98bf72ce08100ce4f0345459d"
+                            , updateUi (TestApp.Typed "check cookies")
+                            , updateUi (TestApp.Add)
+                            , resolveWrite
+                                """{"events":[{"tag":"AddItem","$0":"check cookies"}],"parent":"sha256-21d8798f67e484a638b94355ddbf710f1778b2e98bf72ce08100ce4f0345459d"}"""
                             ]
                         |> expectMockTask
-                            (.writeRef >> (\f -> f "root-v1" (Just "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397") "sha256-8748a9e85c444680b1ab14c94bf6aebcc433f71c836132a0e8a3a52ab71abf2a"))
+                            (.writeRef >> (\f -> f "root-v1" (Just "sha256-21d8798f67e484a638b94355ddbf710f1778b2e98bf72ce08100ce4f0345459d") "sha256-a6373a7147c1d4379bb9f52cff3fb4d27aa8425fc7774aac26b954ff951a193a"))
               -- TODO: a new event happens before writing finishes
             ]
         ]
