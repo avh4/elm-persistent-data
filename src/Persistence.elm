@@ -95,7 +95,7 @@ type Msg event msg
     | ReadRoot (Result String (Maybe String))
     | ReadBatch String (List (List event)) (Result String (Maybe String))
     | WriteBatch String (Result String String)
-    | WriteRoot (Result String ())
+    | WriteRoot String (Result String ())
 
 
 {-| Not sure if this should be exposed... it's needed for testing, though
@@ -220,18 +220,18 @@ update config msg (Model model) =
             -- TODO: verify serverSha matches what we calculated
             ( Model model
             , writeRoot config model.root calculatedSha
-                |> Task.attempt WriteRoot
+                |> Task.attempt (WriteRoot calculatedSha)
             )
 
         WriteBatch batchId (Err _) ->
             Debug.crash "TODO: WriteBatch Err"
 
-        WriteRoot (Ok ()) ->
-            ( Model model
+        WriteRoot newRoot (Ok ()) ->
+            ( Model { model | root = Just newRoot }
             , Cmd.none
             )
 
-        WriteRoot (Err _) ->
+        WriteRoot _ (Err _) ->
             Debug.crash "TODO: WriteRoot Err"
 
 

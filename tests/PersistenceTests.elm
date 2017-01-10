@@ -66,6 +66,18 @@ resolveWrite content =
             (Ok key)
 
 
+resolveWriteRef :
+    String
+    -> Maybe String
+    -> String
+    -> TestContext Mocks model msg
+    -> Result String (TestContext Mocks model msg)
+resolveWriteRef key oldValue newValue =
+    TestContext.resolveMockTask
+        (\mocks -> mocks.writeRef key oldValue newValue)
+        (Ok ())
+
+
 updateUi :
     msg
     -> TestContext mocks model (Persistence.Msg event msg)
@@ -74,24 +86,17 @@ updateUi uiMsg =
     TestContext.update (uiMsg |> Persistence.uimsg) >> Ok
 
 
-expectOk : (a -> Expectation) -> Result x a -> Expectation
+expectOk : (a -> Expectation) -> Result String a -> Expectation
 expectOk expectation result =
     case result of
         Err x ->
-            [ toString result
-            , "╷"
-            , "│ expectOk"
-            , "╵"
-            , "Ok _"
-            ]
-                |> String.join "\n"
-                |> Expect.fail
+            Expect.fail x
 
         Ok a ->
             expectation a
 
 
-testResults : a -> List (a -> Result x a) -> (a -> Expectation) -> Expectation
+testResults : a -> List (a -> Result String a) -> (a -> Expectation) -> Expectation
 testResults init steps expect =
     List.foldl (\f a -> Result.andThen f a) (Ok init) steps
         |> expectOk expect
@@ -104,7 +109,7 @@ foldResults steps init =
 
 expectMockTask :
     (mocks -> MockTask x a)
-    -> Result x1 (TestContext mocks model msg)
+    -> Result String (TestContext mocks model msg)
     -> Expectation
 expectMockTask =
     TestContext.expectMockTask >> expectOk
@@ -112,7 +117,7 @@ expectMockTask =
 
 expectCurrent :
     Persistence.PersistenceState data ui
-    -> Result x (TestContext mocks (Persistence.Model data ui) msg)
+    -> Result String (TestContext mocks (Persistence.Model data ui) msg)
     -> Expectation
 expectCurrent expected =
     expectOk
@@ -247,7 +252,26 @@ all =
                             ]
                         |> expectMockTask
                             (.writeRef >> (\f -> f "root-v1" (Just "batch1") "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397"))
-              -- TODO: after writing, our current root should be updated
+            , test "with a previous root, sets the parent" <|
+                \() ->
+                    start
+                        |> foldResults
+                            [ resolveRead "root-v1" (Just "batch1")
+                            , resolveRead "batch1" (Just """{"events":[],"parent":null}""")
+                            , updateUi (TestApp.Typed "world")
+                            , updateUi (TestApp.Add)
+                            , resolveWrite """{"events":[{"tag":"AddItem","$0":"world"}],"parent":"batch1"}"""
+                            , resolveWriteRef
+                                "root-v1"
+                                (Just "batch1")
+                                "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397"
+                            , updateUi (TestApp.Typed "again")
+                            , updateUi (TestApp.Add)
+                            , resolveWrite
+                                """{"events":[{"tag":"AddItem","$0":"again"}],"parent":"sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397"}"""
+                            ]
+                        |> expectMockTask
+                            (.writeRef >> (\f -> f "root-v1" (Just "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397") "sha256-8748a9e85c444680b1ab14c94bf6aebcc433f71c836132a0e8a3a52ab71abf2a"))
               -- TODO: a new event happens before writing finishes
             ]
         ]
