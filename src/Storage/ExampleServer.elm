@@ -18,10 +18,22 @@ storage : Storage
 storage =
     { read =
         \key ->
-            Http.getString ("/" ++ key)
-                |> Http.toTask
-                |> Task.map Just
-                |> Task.mapError toString
+            let
+                onError error =
+                    case error of
+                        Http.BadStatus response ->
+                            if response.status.code == 404 then
+                                Task.succeed Nothing
+                            else
+                                Task.fail (toString error)
+
+                        _ ->
+                            Task.fail (toString error)
+            in
+                Http.getString ("/" ++ key)
+                    |> Http.toTask
+                    |> Task.map Just
+                    |> Task.onError onError
     , writeContent =
         \blob ->
             let

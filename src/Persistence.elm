@@ -224,8 +224,13 @@ update config msg (Model model) =
                     , Cmd.none
                     )
 
-        ReadBatch _ _ (Ok Nothing) ->
-            Debug.crash "TODO: this is a fatal loading error; a known batch of events is missing"
+        ReadBatch id _ (Ok Nothing) ->
+            ( Model
+                { model
+                    | errors = ("Fatal error: a known batch of events is missing from the storage backend: " ++ id) :: model.errors
+                }
+            , Cmd.none
+            )
 
         ReadBatch id _ (Err message) ->
             ( Model
@@ -236,22 +241,42 @@ update config msg (Model model) =
             )
 
         WriteBatch calculatedSha (Ok serverSha) ->
-            -- TODO: verify serverSha matches what we calculated
-            ( Model model
-            , writeRoot config model.root calculatedSha
-                |> Task.attempt (WriteRoot calculatedSha)
-            )
+            if calculatedSha /= serverSha then
+                ( Model
+                    { model
+                        | errors =
+                            ("Error writing batch: server hash " ++ serverSha ++ " did not match expected hash " ++ calculatedSha) :: model.errors
+                    }
+                , Cmd.none
+                )
+            else
+                ( Model model
+                , writeRoot config model.root calculatedSha
+                    |> Task.attempt (WriteRoot calculatedSha)
+                )
 
-        WriteBatch batchId (Err _) ->
-            Debug.crash "TODO: WriteBatch Err"
+        WriteBatch batchId (Err message) ->
+            ( Model
+                { model
+                    | errors =
+                        ("Error writing batch " ++ batchId ++ ": " ++ message) :: model.errors
+                }
+            , Cmd.none
+            )
 
         WriteRoot newRoot (Ok ()) ->
             ( Model { model | root = Just newRoot }
             , Cmd.none
             )
 
-        WriteRoot _ (Err _) ->
-            Debug.crash "TODO: WriteRoot Err"
+        WriteRoot _ (Err message) ->
+            ( Model
+                { model
+                    | errors =
+                        ("Error writing root: " ++ message) :: model.errors
+                }
+            , Cmd.none
+            )
 
 
 view :
