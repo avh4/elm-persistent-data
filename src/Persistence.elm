@@ -10,6 +10,18 @@ module Persistence
         , current
         )
 
+{-|
+
+## Creating a persistent program
+
+@docs Config, Program, program
+
+## Stuff you shouldn't normally need
+
+@docs Model, Msg, uimsg, PersistenceState, current
+
+-}
+
 import Html exposing (Html)
 import Json.Decode exposing (Decoder)
 import Json.Encode
@@ -19,6 +31,8 @@ import Persistence.Batch as Batch
 import Storage exposing (Storage)
 
 
+{-| Configuration for a persistent program.
+-}
 type alias Config data event state msg =
     { initUi : ( state, Cmd msg )
     , initApp : data
@@ -34,10 +48,16 @@ type alias Config data event state msg =
     }
 
 
+{-| A `Program` type alias for persistent programs.
+
+    main : Persistence.Program Flags Data Event State Msg
+-}
 type alias Program flags data event state msg =
     Platform.Program flags (Model data state) (Msg event msg)
 
 
+{-| The model for a persistence program.
+-}
 type Model data state
     = Model
         { data : data
@@ -66,11 +86,15 @@ init config =
     )
 
 
+{-| The externally-inspectable state of a persistent program.
+-}
 type PersistenceState data ui
     = Loading
     | Ready data ui
 
 
+{-| Get the current state of a persistent program.
+-}
 current : Model data ui -> PersistenceState data ui
 current (Model model) =
     case model.loaded of
@@ -81,6 +105,8 @@ current (Model model) =
             Ready model.data model.ui
 
 
+{-| The Msg type for a persistent program.
+-}
 type Msg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe String))
@@ -240,6 +266,8 @@ view config (Model model) =
             |> Html.map UiMsg
 
 
+{-| Create a persistent program.
+-}
 program :
     Config data event state msg
     -> Program Never data event state msg

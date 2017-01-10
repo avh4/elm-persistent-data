@@ -1,11 +1,19 @@
 module Storage.ExampleServer exposing (storage)
 
+{-| An example `Storage` implementation using HTTP.
+
+@docs storage
+
+-}
+
 import Http
 import Task
 import Sha256
 import Storage exposing (Storage)
 
 
+{-| An example `Storage` implementation using HTTP.
+-}
 storage : Storage
 storage =
     { read =
