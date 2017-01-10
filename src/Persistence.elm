@@ -173,8 +173,10 @@ update config msg (Model model) =
                         | ui = newUi
                         , data = newData
                     }
-                , writeCmd
-                  -- TODO: use uiCmd
+                , Cmd.batch
+                    [ writeCmd
+                    , Cmd.map UiMsg uiCmd
+                    ]
                 )
 
         ReadRoot (Ok Nothing) ->
