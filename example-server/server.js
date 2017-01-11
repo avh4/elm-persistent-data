@@ -11,9 +11,11 @@ function handleRequest (request, response) {
       if (err) {
         response.writeHead(404)
         response.end('Read failed: index.html')
+        console.log('404 GET index.html')
       } else {
         var readStream = fs.createReadStream(null, {fd: fd})
         readStream.pipe(response)
+        console.log('200 GET index.html')
       }
     })
     return
@@ -27,9 +29,11 @@ function handleRequest (request, response) {
       if (err) {
         response.writeHead(404)
         response.end('Read failed: ' + key)
+        console.log('404 GET ' + key)
       } else {
         var readStream = fs.createReadStream(null, {fd: fd})
         readStream.pipe(response)
+        console.log('200 GET ' + key)
       }
     })
   } else if (request.method === 'PUT') {
@@ -38,12 +42,14 @@ function handleRequest (request, response) {
       if (err) {
         response.writeHead(500)
         response.end('Write failed: ' + key)
+        console.log('500 PUT ' + key)
       } else {
         var writeStream = fs.createWriteStream(null, {fd: fd})
         request.pipe(writeStream)
         request.on('end', function () {
           response.writeHead(204)
           response.end()
+          console.log('204 PUT ' + key)
         })
       }
     })
