@@ -46,8 +46,30 @@ function handleRequest (request, response) {
     if (request.method === 'GET') {
       handleRead('refs/' + key, response)
     } else if (request.method === 'PUT') {
-      // TODO: validate x-if-empty, x-if-match headers for refs
-      handleWrite('refs/' + key, request, response)
+      if (request.headers['x-if-empty']) {
+        var exists = fs.existsSync('refs/' + key)
+        if (exists) {
+          response.writeHead(400)
+          response.end('x-if-empty was set, but ref currently exists')
+          console.log('400 PUT refs/' + key + ' (already exists)')
+        } else {
+          handleWrite('refs/' + key, request, response)
+        }
+      } else if (request.headers['x-if-match']) {
+        var actual = fs.readFileSync('refs/' + key, 'utf8')
+        var expected = request.headers['x-if-match']
+        if (actual !== expected) {
+          response.writeHead(400)
+          response.end('x-if-match was set, but ref does not match')
+          console.log('400 PUT refs/' + key + ' (' + actual + ' !== ' + expected + ')')
+        } else {
+          handleWrite('refs/' + key, request, response)
+        }
+      } else {
+        response.writeHead(400)
+        response.end('x-if-empty or x-if-match header is required')
+        console.log('400 PUT refs/' + key)
+      }
     } else {
       response.writeHead(400)
       response.end('Unexpected method: ' + request.method)
