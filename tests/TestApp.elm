@@ -99,12 +99,18 @@ view data state =
 program : Storage -> Persistence.Program Never Data Event UiState Msg
 program storage =
     Persistence.program
-        { initApp = { list = [] }
-        , initUi = ( { input = "" }, Cmd.none )
-        , update = update
-        , updateUi = updateUi
-        , subscriptions = \_ _ -> Sub.none
-        , view = view
+        { data =
+            { init = { list = [] }
+            , update = update
+            , decoder = decoder
+            , encoder = encoder
+            }
+        , ui =
+            { init = ( { input = "" }, Cmd.none )
+            , update = updateUi
+            , subscriptions = \_ _ -> Sub.none
+            , view = view
+            }
         , loadingView = Html.text "Loading..."
         , errorView =
             \errors ->
@@ -112,8 +118,6 @@ program storage =
                     [ Html.text "Errors:"
                     , errors |> List.map (\i -> Html.li [] [ Html.text i ]) |> Html.ul []
                     ]
-        , decoder = decoder
-        , encoder = encoder
         , storage = storage
         }
 

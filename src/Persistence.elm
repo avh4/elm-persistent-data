@@ -35,16 +35,20 @@ import Storage.Hash as Hash exposing (Hash)
 {-| Configuration for a persistent program.
 -}
 type alias Config data event state msg =
-    { initUi : ( state, Cmd msg )
-    , initApp : data
-    , update : event -> data -> data
-    , updateUi : data -> msg -> state -> ( state, Cmd msg, Maybe event )
-    , subscriptions : data -> state -> Sub msg
-    , view : data -> state -> Html msg
+    { data :
+        { init : data
+        , update : event -> data -> data
+        , decoder : Decoder event
+        , encoder : event -> Json.Encode.Value
+        }
+    , ui :
+        { init : ( state, Cmd msg )
+        , update : data -> msg -> state -> ( state, Cmd msg, Maybe event )
+        , subscriptions : data -> state -> Sub msg
+        , view : data -> state -> Html msg
+        }
     , loadingView : Html Never
     , errorView : List String -> Html Never
-    , decoder : Decoder event
-    , encoder : event -> Json.Encode.Value
     , storage : Storage
     }
 
@@ -74,14 +78,14 @@ init :
     -> ( Model data state, Cmd (Msg event msg) )
 init config =
     ( Model
-        { data = config.initApp
-        , ui = Tuple.first config.initUi
+        { data = config.data.init
+        , ui = Tuple.first config.ui.init
         , loaded = False
         , root = Nothing
         , errors = []
         }
     , Cmd.batch
-        [ Cmd.map UiMsg (Tuple.second config.initUi)
+        [ Cmd.map UiMsg (Tuple.second config.ui.init)
         , Task.attempt ReadRoot <| config.storage.refs.read "root-v1"
         ]
     )
@@ -138,7 +142,7 @@ writeBatch : Config data event state msg -> Maybe Hash -> List event -> Cmd (Msg
 writeBatch config parent events =
     let
         json =
-            Batch.encoder config.encoder { events = events, parent = parent }
+            Batch.encoder config.data.encoder { events = events, parent = parent }
                 |> Json.Encode.encode 0
 
         key =
@@ -158,7 +162,7 @@ update config msg (Model model) =
         UiMsg m ->
             let
                 ( newUi, uiCmd, event ) =
-                    config.updateUi model.data m model.ui
+                    config.ui.update model.data m model.ui
 
                 ( newData, writeCmd ) =
                     case event of
@@ -166,7 +170,7 @@ update config msg (Model model) =
                             ( model.data, Cmd.none )
 
                         Just ev ->
-                            ( config.update ev model.data
+                            ( config.data.update ev model.data
                             , writeBatch config model.root [ ev ]
                             )
             in
@@ -200,7 +204,7 @@ update config msg (Model model) =
             )
 
         ReadBatch id whenDone (Ok (Just batchJson)) ->
-            case Json.Decode.decodeString (Batch.decoder config.decoder) batchJson of
+            case Json.Decode.decodeString (Batch.decoder config.data.decoder) batchJson of
                 Ok batch ->
                     case batch.parent of
                         Nothing ->
@@ -210,7 +214,7 @@ update config msg (Model model) =
                                     , data =
                                         (batch.events :: whenDone)
                                             |> List.concat
-                                            |> List.foldl config.update model.data
+                                            |> List.foldl config.data.update model.data
                                 }
                             , Cmd.none
                             )
@@ -282,7 +286,7 @@ view config (Model model) =
     else if model.loaded == False then
         Html.map never config.loadingView
     else
-        config.view model.data model.ui
+        config.ui.view model.data model.ui
             |> Html.map UiMsg
 
 
