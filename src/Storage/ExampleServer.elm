@@ -8,7 +8,6 @@ module Storage.ExampleServer exposing (storage)
 
 import Http
 import Task
-import Sha256
 import Storage exposing (Storage)
 import Storage.Hash as Hash
 
@@ -43,7 +42,7 @@ storage =
                             Nothing ->
                                 Task.succeed Nothing
                 in
-                    Http.getString ("/" ++ key)
+                    Http.getString ("/refs/" ++ key)
                         |> Http.toTask
                         |> Task.map Just
                         |> Task.onError onError
@@ -60,7 +59,7 @@ storage =
                             Just val ->
                                 Http.header "x-if-match" (Hash.toString val)
                         ]
-                    , url = ("/" ++ key)
+                    , url = ("/refs/" ++ key)
                     , body =
                         Http.stringBody
                             "application/octet-stream"
@@ -88,27 +87,27 @@ storage =
                             _ ->
                                 Task.fail (toString error)
                 in
-                    Http.getString ("/" ++ Hash.toString hash)
+                    Http.getString ("/content/" ++ Hash.toString hash)
                         |> Http.toTask
                         |> Task.map Just
                         |> Task.onError onError
         , write =
             \content ->
                 let
-                    key =
-                        Sha256.sha256 content
+                    hash =
+                        Hash.ofString content
                 in
                     Http.request
                         { method = "PUT"
                         , headers = []
-                        , url = ("/" ++ "sha256-" ++ key)
+                        , url = ("/content/" ++ Hash.toString hash)
                         , body = Http.stringBody "application/octet-stream" content
                         , expect = Http.expectStringResponse (\_ -> Ok ())
                         , timeout = Nothing
                         , withCredentials = False
                         }
                         |> Http.toTask
-                        |> Task.map (always (Hash.Sha256 key))
+                        |> Task.map (always hash)
                         |> Task.mapError toString
         }
     }
