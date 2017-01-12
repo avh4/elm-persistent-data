@@ -2,11 +2,12 @@ module Persistence.Batch exposing (Batch, decoder, encoder)
 
 import Json.Decode exposing (Decoder)
 import Json.Encode
+import Storage.Hash as Hash exposing (Hash)
 
 
 type alias Batch event =
     { events : List event
-    , parent : Maybe String
+    , parent : Maybe Hash
     }
 
 
@@ -14,7 +15,7 @@ decoder : Decoder event -> Decoder (Batch event)
 decoder decodeEvent =
     Json.Decode.map2 Batch
         (Json.Decode.field "events" <| Json.Decode.list decodeEvent)
-        (Json.Decode.field "parent" <| Json.Decode.nullable Json.Decode.string)
+        (Json.Decode.field "parent" <| Json.Decode.nullable Hash.decode)
 
 
 encoder : (event -> Json.Encode.Value) -> Batch event -> Json.Encode.Value
@@ -25,7 +26,7 @@ encoder encodeEvent { events, parent } =
       )
     , ( "parent"
       , parent
-            |> Maybe.map Json.Encode.string
+            |> Maybe.map Hash.encode
             |> Maybe.withDefault Json.Encode.null
       )
     ]

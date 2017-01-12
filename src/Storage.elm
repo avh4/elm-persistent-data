@@ -8,29 +8,38 @@ implementaiton to `Persistence`.
 -}
 
 import Task exposing (Task)
+import Storage.Hash exposing (Hash)
 
 
 {-| Storage implementations must implement the following functions, each of
 which returns Task that can give a String error message:
 
-  - **read**: Returns the string currently stored for a given key, or `Nothing`
-    if there is no value stored for that key.
-  - **writeContent**: Stores a content string to the key
-    "sha256-<sha256 of the content>"
-  - **writeRef**: Updates the value stored for `key`, but only if its current
-    value matches `oldValue`.
+`refs` is a key-value store where the keys are Strings and the values are content Hashes.
+To write a value for a key, you must correctly provide the current value.
+
+`content` is an immutable, content-addressable value store where the values are Strings.
+The key of any value is the SHA-256 hash of the value.
 
     myStorage =
-        { read = \key -> ...
-        , writeContent = \content -> ...
-        , writeRef = \key oldValue newValue -> ...
+        { refs =
+            { read = \key -> ...
+            , write = \key oldValue newValue -> ...
+            }
+        , content =
+            { read = \hash -> ...
+            , write = \content -> ...
+            }
         }
 
 -}
 type alias Storage =
-    { read : String -> Task String (Maybe String)
-    , writeContent : String -> Task String String
-    , writeRef :
-        String -> Maybe String -> String -> Task String ()
+    { refs :
+        { read : String -> Task String (Maybe Hash)
+        , write : String -> Maybe Hash -> Hash -> Task String ()
+        }
+    , content :
+        { read : Hash -> Task String (Maybe String)
+        , write : String -> Task String Hash
+        }
         -- , maxBlobSize : Int
     }

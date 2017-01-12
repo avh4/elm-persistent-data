@@ -29,6 +29,7 @@ import Task exposing (Task)
 import Sha256
 import Persistence.Batch as Batch
 import Storage exposing (Storage)
+import Storage.Hash as Hash exposing (Hash)
 
 
 {-| Configuration for a persistent program.
@@ -63,7 +64,7 @@ type Model data state
         { data : data
         , ui : state
         , loaded : Bool
-        , root : Maybe String
+        , root : Maybe Hash
         , errors : List String
         }
 
@@ -81,7 +82,7 @@ init config =
         }
     , Cmd.batch
         [ Cmd.map UiMsg (Tuple.second config.initUi)
-        , Task.attempt ReadRoot <| config.storage.read "root-v1"
+        , Task.attempt ReadRoot <| config.storage.refs.read "root-v1"
         ]
     )
 
@@ -109,10 +110,10 @@ current (Model model) =
 -}
 type Msg event msg
     = UiMsg msg
-    | ReadRoot (Result String (Maybe String))
-    | ReadBatch String (List (List event)) (Result String (Maybe String))
-    | WriteBatch String (Result String String)
-    | WriteRoot String (Result String ())
+    | ReadRoot (Result String (Maybe Hash))
+    | ReadBatch Hash (List (List event)) (Result String (Maybe String))
+    | WriteBatch (Result String Hash)
+    | WriteRoot Hash (Result String ())
 
 
 {-| Not sure if this should be exposed... it's needed for testing, though
@@ -122,17 +123,18 @@ uimsg =
     UiMsg
 
 
-writeRoot : Config data event state msg -> Maybe String -> String -> Task String ()
+writeRoot : Config data event state msg -> Maybe Hash -> Hash -> Task String ()
 writeRoot config previousRoot lastBatchId =
-    config.storage.writeRef "root-v1" previousRoot lastBatchId
+    config.storage.refs.write "root-v1" previousRoot lastBatchId
 
 
-readBatch : Config data event state msg -> String -> List (List event) -> Cmd (Msg event msg)
+readBatch : Config data event state msg -> Hash -> List (List event) -> Cmd (Msg event msg)
 readBatch config batch whenDone =
-    Task.attempt (ReadBatch batch whenDone) <| config.storage.read batch
+    config.storage.content.read batch
+        |> Task.attempt (ReadBatch batch whenDone)
 
 
-writeBatch : Config data event state msg -> Maybe String -> List event -> Cmd (Msg event msg)
+writeBatch : Config data event state msg -> Maybe Hash -> List event -> Cmd (Msg event msg)
 writeBatch config parent events =
     let
         json =
@@ -142,8 +144,8 @@ writeBatch config parent events =
         key =
             "sha256-" ++ Sha256.sha256 json
     in
-        config.storage.writeContent json
-            |> Task.attempt (WriteBatch key)
+        config.storage.content.write json
+            |> Task.attempt WriteBatch
 
 
 update :
@@ -219,7 +221,7 @@ update config msg (Model model) =
                 Err message ->
                     ( Model
                         { model
-                            | errors = ("Error decoding batch " ++ id ++ ": " ++ message) :: model.errors
+                            | errors = ("Error decoding batch " ++ toString id ++ ": " ++ message) :: model.errors
                         }
                     , Cmd.none
                     )
@@ -227,7 +229,7 @@ update config msg (Model model) =
         ReadBatch id _ (Ok Nothing) ->
             ( Model
                 { model
-                    | errors = ("Fatal error: a known batch of events is missing from the storage backend: " ++ id) :: model.errors
+                    | errors = ("Fatal error: a known batch of events is missing from the storage backend: " ++ toString id) :: model.errors
                 }
             , Cmd.none
             )
@@ -235,31 +237,22 @@ update config msg (Model model) =
         ReadBatch id _ (Err message) ->
             ( Model
                 { model
-                    | errors = ("Error reading batch " ++ id ++ ": " ++ message) :: model.errors
+                    | errors = ("Error reading batch " ++ toString id ++ ": " ++ message) :: model.errors
                 }
             , Cmd.none
             )
 
-        WriteBatch calculatedSha (Ok serverSha) ->
-            if calculatedSha /= serverSha then
-                ( Model
-                    { model
-                        | errors =
-                            ("Error writing batch: server hash " ++ serverSha ++ " did not match expected hash " ++ calculatedSha) :: model.errors
-                    }
-                , Cmd.none
-                )
-            else
-                ( Model model
-                , writeRoot config model.root calculatedSha
-                    |> Task.attempt (WriteRoot calculatedSha)
-                )
+        WriteBatch (Ok hash) ->
+            ( Model model
+            , writeRoot config model.root hash
+                |> Task.attempt (WriteRoot hash)
+            )
 
-        WriteBatch batchId (Err message) ->
+        WriteBatch (Err message) ->
             ( Model
                 { model
                     | errors =
-                        ("Error writing batch " ++ batchId ++ ": " ++ message) :: model.errors
+                        ("Error writing batch: " ++ message) :: model.errors
                 }
             , Cmd.none
             )

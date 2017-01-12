@@ -5,83 +5,71 @@ import Expect exposing (Expectation)
 import TestContextWithMocks as TestContext exposing (TestContext, MockTask)
 import TestApp
 import Persistence
-import Sha256
+import Storage.Hash as Hash exposing (Hash)
 
 
 type alias Mocks =
-    { read : String -> MockTask String (Maybe String)
-    , writeContent : String -> MockTask String String
-    , writeRef : String -> Maybe String -> String -> MockTask String ()
+    { readRef : String -> MockTask String (Maybe Hash)
+    , readContent : Hash -> MockTask String (Maybe String)
+    , writeContent : String -> MockTask String Hash
+    , writeRef : String -> Maybe Hash -> Hash -> MockTask String ()
     }
 
 
-start : TestContext Mocks (Persistence.Model TestApp.Data TestApp.UiState) (Persistence.Msg TestApp.Event TestApp.Msg)
+mocks : Mocks
+mocks =
+    { readRef =
+        \key ->
+            TestContext.mockTask ("refs.read:" ++ key)
+    , writeRef =
+        \key old new ->
+            TestContext.mockTask ("refs.write:" ++ key ++ ":" ++ toString old ++ ":" ++ toString new)
+    , readContent =
+        \key ->
+            TestContext.mockTask ("content.read:" ++ toString key)
+    , writeContent =
+        \content ->
+            TestContext.mockTask ("content.write:" ++ content)
+    }
+
+
+start : TestContext (Persistence.Model TestApp.Data TestApp.UiState) (Persistence.Msg TestApp.Event TestApp.Msg)
 start =
-    TestContext.start
-        (\mocks ->
-            TestApp.program
-                { read =
-                    mocks.read >> TestContext.toTask
-                , writeContent =
-                    mocks.writeContent >> TestContext.toTask
-                , writeRef =
-                    \a b c ->
-                        TestContext.toTask (mocks.writeRef a b c)
-                }
-        )
-        (\token ->
+    TestApp.program
+        { refs =
             { read =
-                \key ->
-                    TestContext.mockTask token ("read:" ++ key)
-            , writeContent =
-                \content ->
-                    TestContext.mockTask token ("writeContent:" ++ content)
-            , writeRef =
-                \key old new ->
-                    TestContext.mockTask token ("writeRef:" ++ key ++ ":" ++ toString old ++ ":" ++ new)
+                mocks.readRef >> TestContext.toTask
+            , write =
+                \a b c ->
+                    TestContext.toTask (mocks.writeRef a b c)
             }
-        )
+        , content =
+            { read = mocks.readContent >> TestContext.toTask
+            , write =
+                mocks.writeContent >> TestContext.toTask
+            }
+        }
+        |> TestContext.start
 
 
-resolveRead :
-    String
-    -> Maybe String
-    -> TestContext Mocks model msg
-    -> Result String (TestContext Mocks model msg)
-resolveRead key value =
-    TestContext.resolveMockTask (.read >> (|>) key) (Ok value)
+hash : String -> Hash
+hash =
+    Hash.ofString
 
 
-resolveWrite :
-    String
-    -> TestContext Mocks model msg
-    -> Result String (TestContext Mocks model msg)
-resolveWrite content =
-    let
-        key =
-            "sha256-" ++ Sha256.sha256 content
-    in
-        TestContext.resolveMockTask
-            (.writeContent >> (|>) content)
-            (Ok key)
-
-
-resolveWriteRef :
-    String
-    -> Maybe String
-    -> String
-    -> TestContext Mocks model msg
-    -> Result String (TestContext Mocks model msg)
-resolveWriteRef key oldValue newValue =
-    TestContext.resolveMockTask
-        (\mocks -> mocks.writeRef key oldValue newValue)
-        (Ok ())
+resolve :
+    MockTask error a
+    -> a
+    -> TestContext model msg
+    -> Result String (TestContext model msg)
+resolve mock value =
+    TestContext.resolveMockTask mock (Ok value)
 
 
 updateUi :
     msg
-    -> TestContext mocks model (Persistence.Msg event msg)
-    -> Result error (TestContext mocks model (Persistence.Msg event msg))
+    -> TestContext model (Persistence.Msg event msg)
+    -> Result error (TestContext model (Persistence.Msg event msg))
 updateUi uiMsg =
     TestContext.update (uiMsg |> Persistence.uimsg) >> Ok
 
@@ -108,8 +96,8 @@ foldResults steps init =
 
 
 expectMockTask :
-    (mocks -> MockTask x a)
-    -> Result String (TestContext mocks model msg)
+    MockTask x a
+    -> Result String (TestContext model msg)
     -> Expectation
 expectMockTask =
     TestContext.expectMockTask >> expectOk
@@ -117,7 +105,7 @@ expectMockTask =
 
 expectCurrent :
     Persistence.PersistenceState data ui
-    -> Result String (TestContext mocks (Persistence.Model data ui) msg)
+    -> Result String (TestContext (Persistence.Model data ui) msg)
     -> Expectation
 expectCurrent expected =
     expectOk
@@ -140,7 +128,7 @@ all =
             [ test "with no previous data, when load succeeds, shows initial state" <|
                 \() ->
                     testResults start
-                        [ resolveRead "root-v1" Nothing ]
+                        [ resolve (mocks.readRef "root-v1") Nothing ]
                         (TestContext.model
                             >> Persistence.current
                             >> Expect.equal
@@ -151,18 +139,22 @@ all =
                         )
             , test "with previous data in a single batch, when load succeeds, shows previous data" <|
                 \() ->
-                    testResults start
-                        [ resolveRead "root-v1" (Just "batch1")
-                        , resolveRead "batch1" (Just """{"events":[{"tag":"AddItem","$0":"hello"}],"parent":null}""")
-                        ]
-                        (TestContext.model
-                            >> Persistence.current
-                            >> Expect.equal
-                                (Persistence.Ready
-                                    { list = [ "hello" ] }
-                                    { input = "" }
-                                )
-                        )
+                    let
+                        batch =
+                            """{"events":[{"tag":"AddItem","$0":"hello"}],"parent":null}"""
+                    in
+                        testResults start
+                            [ resolve (mocks.readRef "root-v1") (Just <| hash batch)
+                            , resolve (mocks.readContent (hash batch)) (Just batch)
+                            ]
+                            (TestContext.model
+                                >> Persistence.current
+                                >> Expect.equal
+                                    (Persistence.Ready
+                                        { list = [ "hello" ] }
+                                        { input = "" }
+                                    )
+                            )
               -- TODO: verify ordering of event replay
               -- TODO: error loading root
               -- TODO: error loading batch
@@ -170,19 +162,26 @@ all =
               -- TODO: error decoding batch JSON
             , test "with previous data in multiple batches, when load succeeds, shows previous data" <|
                 \() ->
-                    testResults start
-                        [ resolveRead "root-v1" (Just "batch2")
-                        , resolveRead "batch2" (Just """{"events":[{"tag":"AddItem","$0":"world"}],"parent":"batch1"}""")
-                        , resolveRead "batch1" (Just """{"events":[{"tag":"AddItem","$0":"hello"}],"parent":null}""")
-                        ]
-                        (TestContext.model
-                            >> Persistence.current
-                            >> Expect.equal
-                                (Persistence.Ready
-                                    { list = [ "world", "hello" ] }
-                                    { input = "" }
-                                )
-                        )
+                    let
+                        batch1 =
+                            """{"events":[{"tag":"AddItem","$0":"hello"}],"parent":null}"""
+
+                        batch2 =
+                            """{"events":[{"tag":"AddItem","$0":"world"}],"parent":""" ++ "\"" ++ Hash.toString (hash batch1) ++ """"}"""
+                    in
+                        testResults start
+                            [ resolve (mocks.readRef "root-v1") (Just <| hash batch2)
+                            , resolve (mocks.readContent (hash batch2)) (Just batch2)
+                            , resolve (mocks.readContent (hash batch1)) (Just batch1)
+                            ]
+                            (TestContext.model
+                                >> Persistence.current
+                                >> Expect.equal
+                                    (Persistence.Ready
+                                        { list = [ "world", "hello" ] }
+                                        { input = "" }
+                                    )
+                            )
               -- TODO: should be in Loading state until all batches finish
               -- TODO: error loading second batch fails
               -- TODO: someday: with cached reduction
@@ -192,7 +191,7 @@ all =
                 \() ->
                     testResults
                         start
-                        [ resolveRead "root-v1" Nothing
+                        [ resolve (mocks.readRef "root-v1") Nothing
                         , updateUi (TestApp.Typed "world")
                         ]
                         (TestContext.model
@@ -207,7 +206,7 @@ all =
                 \() ->
                     start
                         |> foldResults
-                            [ resolveRead "root-v1" Nothing
+                            [ resolve (mocks.readRef "root-v1") Nothing
                             , updateUi (TestApp.Typed "world")
                             , updateUi (TestApp.Add)
                             ]
@@ -222,61 +221,73 @@ all =
                 \() ->
                     start
                         |> foldResults
-                            [ resolveRead "root-v1" Nothing
+                            [ resolve (mocks.readRef "root-v1") Nothing
                             , updateUi (TestApp.Typed "world")
                             , updateUi (TestApp.Add)
                             ]
                         |> expectMockTask
-                            (.writeContent >> (|>) """{"events":[{"tag":"AddItem","$0":"world"}],"parent":null}""")
+                            (mocks.writeContent """{"events":[{"tag":"AddItem","$0":"world"}],"parent":null}""")
               -- TODO: when the batch fails
             , test "when the batch succeeds, writes root" <|
                 \() ->
-                    start
-                        |> foldResults
-                            [ resolveRead "root-v1" Nothing
-                            , updateUi (TestApp.Typed "world")
-                            , updateUi (TestApp.Add)
-                            , resolveWrite """{"events":[{"tag":"AddItem","$0":"world"}],"parent":null}"""
-                            ]
-                        |> expectMockTask
-                            (.writeRef >> (\f -> f "root-v1" Nothing "sha256-fac6de7c836658da9d006a860e5affefe8e0fc2722c6a2326616a39722db0d37"))
+                    let
+                        batch =
+                            """{"events":[{"tag":"AddItem","$0":"world"}],"parent":null}"""
+                    in
+                        start
+                            |> foldResults
+                                [ resolve (mocks.readRef "root-v1") Nothing
+                                , updateUi (TestApp.Typed "world")
+                                , updateUi (TestApp.Add)
+                                , resolve (mocks.writeContent batch) (hash batch)
+                                ]
+                            |> expectMockTask
+                                (mocks.writeRef "root-v1" Nothing (hash batch))
             , test "with a previous root, sets the parent" <|
                 \() ->
-                    start
-                        |> foldResults
-                            [ resolveRead "root-v1" (Just "batch1")
-                            , resolveRead "batch1" (Just """{}""")
-                            , updateUi (TestApp.Typed "world")
-                            , updateUi (TestApp.Add)
-                            , resolveWrite """{"events":[{"tag":"AddItem","$0":"world"}],"parent":"batch1"}"""
-                            ]
-                        |> expectMockTask
-                            (.writeRef >> (\f -> f "root-v1" (Just "batch1") "sha256-2a15be4b4207fb34dea2cbfc3ec77d655441bcb4cba0d1da83d1e020a94fa397"))
+                    let
+                        batch1 =
+                            """{}"""
+
+                        batch2 =
+                            """{"events":[{"tag":"AddItem","$0":"world"}],"parent":""" ++ "\"" ++ Hash.toString (hash batch1) ++ """"}"""
+                    in
+                        start
+                            |> foldResults
+                                [ resolve (mocks.readRef "root-v1") (Just <| hash batch1)
+                                , resolve (mocks.readContent (hash batch1)) (Just batch1)
+                                , updateUi (TestApp.Typed "world")
+                                , updateUi (TestApp.Add)
+                                , resolve (mocks.writeContent batch2) (hash batch2)
+                                ]
+                            |> expectMockTask
+                                (mocks.writeRef "root-v1" (Just <| hash batch1) (hash batch2))
             , test "with a previous root, sets the parent" <|
                 \() ->
-                    start
-                        |> foldResults
-                            [ resolveRead
-                                "root-v1"
-                                (Just "sha-5f115dc5ad57198459201ab92cee7b3cf8c85a12050e359a12a2a0dd2e59ca6d")
-                            , resolveRead
-                                "sha-5f115dc5ad57198459201ab92cee7b3cf8c85a12050e359a12a2a0dd2e59ca6d"
-                                (Just """{"events":[],"parent":null}""")
-                            , updateUi (TestApp.Typed "buy carrots")
-                            , updateUi (TestApp.Add)
-                            , resolveWrite
-                                """{"events":[{"tag":"AddItem","$0":"buy carrots"}],"parent":"sha-5f115dc5ad57198459201ab92cee7b3cf8c85a12050e359a12a2a0dd2e59ca6d"}"""
-                            , resolveWriteRef
-                                "root-v1"
-                                (Just "sha-5f115dc5ad57198459201ab92cee7b3cf8c85a12050e359a12a2a0dd2e59ca6d")
-                                "sha256-be598eb60eb3dbfdb3d974b513be6e8cdbb40ebece2c0372d6e5c245f5d20181"
-                            , updateUi (TestApp.Typed "check cookies")
-                            , updateUi (TestApp.Add)
-                            , resolveWrite
-                                """{"events":[{"tag":"AddItem","$0":"check cookies"}],"parent":"sha256-be598eb60eb3dbfdb3d974b513be6e8cdbb40ebece2c0372d6e5c245f5d20181"}"""
-                            ]
-                        |> expectMockTask
-                            (.writeRef >> (\f -> f "root-v1" (Just "sha256-be598eb60eb3dbfdb3d974b513be6e8cdbb40ebece2c0372d6e5c245f5d20181") "sha256-fe9b0bdd507045f9b12b25cbbff5f612ecf0ed2ca5e06cb582990ddae69b76ec"))
+                    let
+                        batch1 =
+                            """{"events":[],"parent":null}"""
+
+                        batch2 =
+                            """{"events":[{"tag":"AddItem","$0":"buy carrots"}],"parent":""" ++ "\"" ++ Hash.toString (hash batch1) ++ """"}"""
+
+                        batch3 =
+                            """{"events":[{"tag":"AddItem","$0":"check cookies"}],"parent":""" ++ "\"" ++ Hash.toString (hash batch2) ++ """"}"""
+                    in
+                        start
+                            |> foldResults
+                                [ resolve (mocks.readRef "root-v1") (Just <| hash batch1)
+                                , resolve (mocks.readContent (hash batch1)) (Just batch1)
+                                , updateUi (TestApp.Typed "buy carrots")
+                                , updateUi (TestApp.Add)
+                                , resolve (mocks.writeContent batch2) (hash batch2)
+                                , resolve (mocks.writeRef "root-v1" (Just <| hash batch1) (hash batch2)) ()
+                                , updateUi (TestApp.Typed "check cookies")
+                                , updateUi (TestApp.Add)
+                                , resolve (mocks.writeContent batch3) (hash batch3)
+                                ]
+                            |> expectMockTask
+                                (mocks.writeRef "root-v1" (Just <| hash batch2) (hash batch3))
               -- TODO: a new event happens before writing finishes
             ]
         ]
