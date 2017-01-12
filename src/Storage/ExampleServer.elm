@@ -75,7 +75,7 @@ storage =
         }
     , content =
         { read =
-            \(Hash.Sha256 key) ->
+            \hash ->
                 let
                     onError error =
                         case error of
@@ -88,7 +88,7 @@ storage =
                             _ ->
                                 Task.fail (toString error)
                 in
-                    Http.getString ("/" ++ key)
+                    Http.getString ("/" ++ Hash.toString hash)
                         |> Http.toTask
                         |> Task.map Just
                         |> Task.onError onError
