@@ -1,11 +1,19 @@
-module Storage.Cache exposing (cache)
+module Storage.Cache exposing (cache, contentStore)
 
 import Storage exposing (Storage)
 import Task
+import Process
 
 
-cache : Storage.ContentStore -> Storage.ContentStore -> Storage.ContentStore
+cache : Storage -> Storage -> Storage
 cache fast slow =
+    { refs = slow.refs
+    , content = contentStore fast.content slow.content
+    }
+
+
+contentStore : Storage.ContentStore -> Storage.ContentStore -> Storage.ContentStore
+contentStore fast slow =
     { read =
         \hash ->
             fast.read hash
@@ -17,6 +25,17 @@ cache fast slow =
 
                             Nothing ->
                                 slow.read hash
+                                    |> Task.andThen
+                                        (\slowValue ->
+                                            case slowValue of
+                                                Nothing ->
+                                                    Task.succeed Nothing
+
+                                                Just v ->
+                                                    fast.write v
+                                                        |> Process.spawn
+                                                        |> Task.map (always slowValue)
+                                        )
                     )
-    , write = \value -> Task.fail "TODO"
+    , write = \value -> slow.write value
     }

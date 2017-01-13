@@ -31,7 +31,7 @@ slowWrite value =
 
 
 cache =
-    Cache.cache
+    Cache.contentStore
         { read = fastRead >> TestContext.toTask
         , write = fastWrite >> TestContext.toTask
         }
@@ -74,6 +74,13 @@ all =
                 , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
                 ]
                 (Ok <| Just "ABC")
+            , test "when slow store succeeds, writes to fast store" <|
+                \() ->
+                    testResults (start <| cache.read (Hash.ofString "ABC"))
+                        [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok <| Nothing)
+                        , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
+                        ]
+                        (TestContext.expectMockTask (fastWrite "ABC"))
             ]
         ]
 

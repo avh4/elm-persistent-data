@@ -2,3 +2,6 @@
 	path = unpublished-packages/avh4/elm-testable
 	url = https://github.com/avh4/elm-testable.git
 	branch = rewrite-native
+[submodule "unpublished-packages/elm-lang/persistent-cache"]
+	path = unpublished-packages/elm-lang/persistent-cache
+	url = https://github.com/elm-lang/persistent-cache.git

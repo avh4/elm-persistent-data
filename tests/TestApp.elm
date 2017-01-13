@@ -7,8 +7,8 @@ import Persistence
 import Json.Decode
 import Json.Encode
 import Storage exposing (Storage)
-import Storage.ExampleServer
 import Storage.Debug
+import Storage.ExampleServer
 
 
 type alias Data =
@@ -125,4 +125,5 @@ program storage =
 
 main : Persistence.Program Never Data Event UiState Msg
 main =
-    program (Storage.Debug.storage "TestApp" Storage.ExampleServer.storage)
+    program
+        (Storage.Debug.storage "example-server (HTTP)" Storage.ExampleServer.storage)
