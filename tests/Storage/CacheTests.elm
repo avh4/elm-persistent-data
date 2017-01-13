@@ -68,6 +68,12 @@ all =
                 (cache.read (Hash.ofString "ABC"))
                 [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok <| Just "ABC") ]
                 (Ok <| Just "ABC")
+            , testTask "when only the slow store has the value"
+                (cache.read (Hash.ofString "ABC"))
+                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok <| Nothing)
+                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
+                ]
+                (Ok <| Just "ABC")
             ]
         ]
 
