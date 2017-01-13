@@ -9,6 +9,7 @@
     "exposed-modules": [
       "Persistence",
       "Storage",
+      "Storage.Debug",
       "Storage.Hash",
       "Storage.ExampleServer"
     ],
