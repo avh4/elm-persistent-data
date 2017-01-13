@@ -43,8 +43,8 @@ contentStore label impl =
     { read =
         \hash ->
             impl.read hash
-                |> Task.map (Debug.log (label ++ ": content.read: Ok: " ++ Hash.toString hash))
-                |> Task.mapError (Debug.log (label ++ ": content.read: Err: " ++ Hash.toString hash))
+                |> Task.map (Debug.log (label ++ ": content.read: " ++ Hash.toString hash ++ ": Ok"))
+                |> Task.mapError (Debug.log (label ++ ": content.read: " ++ Hash.toString hash ++ ": Err"))
     , write =
         \value ->
             impl.write (Debug.log (label ++ ": content.write") value)
