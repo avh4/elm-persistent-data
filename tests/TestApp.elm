@@ -88,12 +88,14 @@ view data state =
         [ Html.ul []
             (List.map (\i -> Html.li [] [ Html.text i ]) data.list)
         , Html.hr [] []
-        , Html.input
-            [ Html.Events.onInput Typed
-            , Html.Attributes.value state.input
+        , Html.form [ Html.Events.onSubmit Add ]
+            [ Html.input
+                [ Html.Events.onInput Typed
+                , Html.Attributes.value state.input
+                ]
+                []
+            , Html.button [] [ Html.text "Add" ]
             ]
-            []
-        , Html.button [ Html.Events.onClick Add ] [ Html.text "Add" ]
         ]
 
 
