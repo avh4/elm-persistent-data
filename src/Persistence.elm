@@ -329,7 +329,10 @@ programWithNavigation locationToMessage config =
         { init =
             \location ->
                 init config
-                    |> programAndThen (update config (locationToMessage location |> UiMsg))
+                    |> -- TODO something's probably wrong if the initial location
+                       -- (or actually any location change) causes a persistable event
+                       -- probably the API should be changes to prevent that possibility
+                       programAndThen (update config (locationToMessage location |> UiMsg))
         , update = update config
         , subscriptions = \_ -> Sub.none
         , view = view config
