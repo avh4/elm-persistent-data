@@ -122,6 +122,7 @@ program storage =
                     , errors |> List.map (\i -> Html.li [] [ Html.text i ]) |> Html.ul []
                     ]
         , storage = storage
+        , appId = "io.github.avh4.elm-persistent-data.test-app"
         }
 
 

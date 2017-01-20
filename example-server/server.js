@@ -41,8 +41,8 @@ function handleRequest (request, response) {
 
   if (path === '/') {
     handleRead('index.html', response)
-  } else if (path.match(/^\/refs\/([-a-zA-Z0-9]*)$/)) {
-    key = path.match(/^\/refs\/([-a-zA-Z0-9]*)$/)[1]
+  } else if (path.match(/^\/refs\/([-.a-zA-Z0-9]*)$/)) {
+    key = path.match(/^\/refs\/([-.a-zA-Z0-9]*)$/)[1]
     if (request.method === 'GET') {
       handleRead('refs/' + key, response)
     } else if (request.method === 'PUT') {

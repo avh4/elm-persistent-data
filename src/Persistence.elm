@@ -50,6 +50,9 @@ type alias Config data event state msg =
     , loadingView : Html Never
     , errorView : List String -> Html Never
     , storage : Storage
+    , appId :
+        -- This is used so that multiple apps can use the same storage configuration
+        String
     }
 
 
@@ -86,7 +89,7 @@ init config =
         }
     , Cmd.batch
         [ Cmd.map UiMsg (Tuple.second config.ui.init)
-        , Task.attempt ReadRoot <| config.storage.refs.read "root-v1"
+        , Task.attempt ReadRoot <| config.storage.refs.read (config.appId ++ ".root-v1")
         ]
     )
 
@@ -129,7 +132,7 @@ uimsg =
 
 writeRoot : Config data event state msg -> Maybe Hash -> Hash -> Task String ()
 writeRoot config previousRoot lastBatchId =
-    config.storage.refs.write "root-v1" previousRoot lastBatchId
+    config.storage.refs.write (config.appId ++ ".root-v1") previousRoot lastBatchId
 
 
 readBatch : Config data event state msg -> Hash -> List (List event) -> Cmd (Msg event msg)

@@ -128,7 +128,7 @@ all =
             [ test "with no previous data, when load succeeds, shows initial state" <|
                 \() ->
                     testResults start
-                        [ resolve (mocks.readRef "root-v1") Nothing ]
+                        [ resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") Nothing ]
                         (TestContext.model
                             >> Persistence.current
                             >> Expect.equal
@@ -144,7 +144,7 @@ all =
                             """{"events":[{"tag":"AddItem","$0":"hello"}],"parent":null}"""
                     in
                         testResults start
-                            [ resolve (mocks.readRef "root-v1") (Just <| hash batch)
+                            [ resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch)
                             , resolve (mocks.readContent (hash batch)) (Just batch)
                             ]
                             (TestContext.model
@@ -170,7 +170,7 @@ all =
                             """{"events":[{"tag":"AddItem","$0":"world"}],"parent":""" ++ "\"" ++ Hash.toString (hash batch1) ++ """"}"""
                     in
                         testResults start
-                            [ resolve (mocks.readRef "root-v1") (Just <| hash batch2)
+                            [ resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch2)
                             , resolve (mocks.readContent (hash batch2)) (Just batch2)
                             , resolve (mocks.readContent (hash batch1)) (Just batch1)
                             ]
@@ -191,7 +191,7 @@ all =
                 \() ->
                     testResults
                         start
-                        [ resolve (mocks.readRef "root-v1") Nothing
+                        [ resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") Nothing
                         , updateUi (TestApp.Typed "world")
                         ]
                         (TestContext.model
@@ -206,7 +206,7 @@ all =
                 \() ->
                     start
                         |> foldResults
-                            [ resolve (mocks.readRef "root-v1") Nothing
+                            [ resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") Nothing
                             , updateUi (TestApp.Typed "world")
                             , updateUi (TestApp.Add)
                             ]
@@ -221,7 +221,7 @@ all =
                 \() ->
                     start
                         |> foldResults
-                            [ resolve (mocks.readRef "root-v1") Nothing
+                            [ resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") Nothing
                             , updateUi (TestApp.Typed "world")
                             , updateUi (TestApp.Add)
                             ]
@@ -236,13 +236,13 @@ all =
                     in
                         start
                             |> foldResults
-                                [ resolve (mocks.readRef "root-v1") Nothing
+                                [ resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") Nothing
                                 , updateUi (TestApp.Typed "world")
                                 , updateUi (TestApp.Add)
                                 , resolve (mocks.writeContent batch) (hash batch)
                                 ]
                             |> expectMockTask
-                                (mocks.writeRef "root-v1" Nothing (hash batch))
+                                (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" Nothing (hash batch))
             , test "with a previous root, sets the parent" <|
                 \() ->
                     let
@@ -254,14 +254,14 @@ all =
                     in
                         start
                             |> foldResults
-                                [ resolve (mocks.readRef "root-v1") (Just <| hash batch1)
+                                [ resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch1)
                                 , resolve (mocks.readContent (hash batch1)) (Just batch1)
                                 , updateUi (TestApp.Typed "world")
                                 , updateUi (TestApp.Add)
                                 , resolve (mocks.writeContent batch2) (hash batch2)
                                 ]
                             |> expectMockTask
-                                (mocks.writeRef "root-v1" (Just <| hash batch1) (hash batch2))
+                                (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" (Just <| hash batch1) (hash batch2))
             , test "with a previous root, sets the parent" <|
                 \() ->
                     let
@@ -276,18 +276,18 @@ all =
                     in
                         start
                             |> foldResults
-                                [ resolve (mocks.readRef "root-v1") (Just <| hash batch1)
+                                [ resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch1)
                                 , resolve (mocks.readContent (hash batch1)) (Just batch1)
                                 , updateUi (TestApp.Typed "buy carrots")
                                 , updateUi (TestApp.Add)
                                 , resolve (mocks.writeContent batch2) (hash batch2)
-                                , resolve (mocks.writeRef "root-v1" (Just <| hash batch1) (hash batch2)) ()
+                                , resolve (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" (Just <| hash batch1) (hash batch2)) ()
                                 , updateUi (TestApp.Typed "check cookies")
                                 , updateUi (TestApp.Add)
                                 , resolve (mocks.writeContent batch3) (hash batch3)
                                 ]
                             |> expectMockTask
-                                (mocks.writeRef "root-v1" (Just <| hash batch2) (hash batch3))
+                                (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" (Just <| hash batch2) (hash batch3))
               -- TODO: a new event happens before writing finishes
             ]
         ]
