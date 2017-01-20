@@ -6,7 +6,7 @@ var app = express()
 
 app.use(morgan('tiny'))
 
-const PORT = 8080
+const PORT = process.env.PORT || 8080
 
 app.use(function (req, res, next) {
   res.header('Access-Control-Allow-Origin', '*')
