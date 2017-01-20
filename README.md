@@ -5,6 +5,6 @@
 
 Compile everything:  `./check.sh`
 
-Run the server: `cd example-server; node server.js`
+Run the server: `cd example-server; npm install; node server.js`
 
 Go to http://localhost:8080 to see the app (source is in `tests/TestApp.elm`).

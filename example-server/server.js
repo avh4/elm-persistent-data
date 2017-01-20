@@ -1,97 +1,83 @@
-var http = require('http')
 var fs = require('fs')
+var path = require('path')
+var morgan = require('morgan')
+var express = require('express')
+var app = express()
+
+app.use(morgan('tiny'))
 
 const PORT = 8080
 
-function handleRead (key, response) {
-  fs.open(key, 'r', function (err, fd) {
-    if (err) {
-      response.writeHead(404)
-      response.end('Read failed: ' + key)
-      console.log('404 GET ' + key)
-    } else {
-      var readStream = fs.createReadStream(null, {fd: fd})
-      readStream.pipe(response)
-      console.log('200 GET ' + key)
-    }
-  })
-}
-
-function handleWrite (key, request, response) {
+function handleWrite (key, req, res) {
   fs.open(key, 'w', function (err, fd) {
     if (err) {
-      response.writeHead(500)
-      response.end('Write failed: ' + key)
-      console.log('500 PUT ' + key)
+      throw err
     } else {
       var writeStream = fs.createWriteStream(null, {fd: fd})
-      request.pipe(writeStream)
-      request.on('end', function () {
-        response.writeHead(204)
-        response.end()
-        console.log('204 PUT ' + key)
+      req.pipe(writeStream)
+      req.on('end', function () {
+        res.sendStatus(204)
       })
     }
   })
 }
 
-function handleRequest (request, response) {
-  var path = request.url
-  var key
+app.get('/', function (req, res) {
+  res.sendFile('index.html', { root: __dirname })
+})
 
-  if (path === '/') {
-    handleRead('index.html', response)
-  } else if (path.match(/^\/refs\/([-.a-zA-Z0-9]*)$/)) {
-    key = path.match(/^\/refs\/([-.a-zA-Z0-9]*)$/)[1]
-    if (request.method === 'GET') {
-      handleRead('refs/' + key, response)
-    } else if (request.method === 'PUT') {
-      if (request.headers['x-if-empty']) {
-        var exists = fs.existsSync('refs/' + key)
-        if (exists) {
-          response.writeHead(400)
-          response.end('x-if-empty was set, but ref currently exists')
-          console.log('400 PUT refs/' + key + ' (already exists)')
-        } else {
-          handleWrite('refs/' + key, request, response)
-        }
-      } else if (request.headers['x-if-match']) {
-        var actual = fs.readFileSync('refs/' + key, 'utf8')
-        var expected = request.headers['x-if-match']
-        if (actual !== expected) {
-          response.writeHead(400)
-          response.end('x-if-match was set, but ref does not match')
-          console.log('400 PUT refs/' + key + ' (' + actual + ' !== ' + expected + ')')
-        } else {
-          handleWrite('refs/' + key, request, response)
-        }
+app.get('/refs/:key', function (req, res) {
+  if (req.url.match(/^\/refs\/([-.a-zA-Z0-9]*)$/)) {
+    res.sendFile(req.params.key, { root: path.join(__dirname, '/refs') })
+  } else {
+    res.sendStatus(404)
+  }
+})
+
+app.put('/refs/:key', function (req, res) {
+  if (req.url.match(/^\/refs\/([-.a-zA-Z0-9]*)$/)) {
+    var key = req.params.key
+    if (req.headers['x-if-empty']) {
+      var exists = fs.existsSync('refs/' + key)
+      if (exists) {
+        res.status(400).send('x-if-empty was set, but ref currently exists')
+        // console.log('400 PUT refs/' + key + ' (already exists)')
       } else {
-        response.writeHead(400)
-        response.end('x-if-empty or x-if-match header is required')
-        console.log('400 PUT refs/' + key)
+        handleWrite('refs/' + key, req, res)
+      }
+    } else if (req.headers['x-if-match']) {
+      var actual = fs.readFileSync('refs/' + key, 'utf8')
+      var expected = req.headers['x-if-match']
+      if (actual !== expected) {
+        res.status(400).send('x-if-match was set, but ref does not match')
+        // console.log('400 PUT refs/' + key + ' (' + actual + ' !== ' + expected + ')')
+      } else {
+        handleWrite('refs/' + key, req, res)
       }
     } else {
-      response.writeHead(400)
-      response.end('Unexpected method: ' + request.method)
-    }
-  } else if (path.match(/^\/content\/(sha256-[a-f0-9]{64})$/)) {
-    key = path.match(/^\/content\/(sha256-[a-f0-9]{64})$/)[1]
-    if (request.method === 'GET') {
-      handleRead('content/' + key, response)
-    } else if (request.method === 'PUT') {
-      handleWrite('content/' + key, request, response)
-    } else {
-      response.writeHead(400)
-      response.end('Unexpected method: ' + request.method)
+      res.status(400).send('x-if-empty or x-if-match header is required')
     }
   } else {
-    response.writeHead(404)
-    response.end()
+    res.sendStatus(404)
   }
-}
+})
 
-var server = http.createServer(handleRequest)
+app.get('/content/:key', function (req, res) {
+  if (req.url.match(/^\/content\/(sha256-[a-f0-9]{64})$/)) {
+    res.sendFile(req.params.key, { root: path.join(__dirname, '/content') })
+  } else {
+    res.sendStatus(404)
+  }
+})
 
-server.listen(PORT, function () {
+app.put('/content/:key', function (req, res) {
+  if (req.url.match(/^\/content\/(sha256-[a-f0-9]{64})$/)) {
+    handleWrite('content/' + req.params.key, req, res)
+  } else {
+    res.sendStatus(404)
+  }
+})
+
+app.listen(PORT, function () {
   console.log('Server listening on: http://localhost:%s', PORT)
 })
