@@ -6,6 +6,7 @@ module Persistence
         , Msg
         , uimsg
         , program
+        , programWithNavigation
         , PersistenceState(..)
         , current
         )
@@ -14,7 +15,7 @@ module Persistence
 
 ## Creating a persistent program
 
-@docs Config, Program, program
+@docs Config, Program, program, programWithNavigation
 
 ## Stuff you shouldn't normally need
 
@@ -30,6 +31,7 @@ import Sha256
 import Persistence.Batch as Batch
 import Storage exposing (Storage)
 import Storage.Hash as Hash exposing (Hash)
+import Navigation
 
 
 {-| Configuration for a persistent program.
@@ -301,6 +303,33 @@ program :
 program config =
     Html.program
         { init = init config
+        , update = update config
+        , subscriptions = \_ -> Sub.none
+        , view = view config
+        }
+
+
+programAndThen : (a -> ( b, Cmd msg )) -> ( a, Cmd msg ) -> ( b, Cmd msg )
+programAndThen next ( a, cmdA ) =
+    let
+        ( b, cmdB ) =
+            next a
+    in
+        ( b, Cmd.batch [ cmdA, cmdB ] )
+
+
+{-| Create a persistent program with navigation (see elm-lang/navigation).
+-}
+programWithNavigation :
+    (Navigation.Location -> msg)
+    -> Config data event state msg
+    -> Program Never data event state msg
+programWithNavigation locationToMessage config =
+    Navigation.program (locationToMessage >> UiMsg)
+        { init =
+            \location ->
+                init config
+                    |> programAndThen (update config (locationToMessage location |> UiMsg))
         , update = update config
         , subscriptions = \_ -> Sub.none
         , view = view config
