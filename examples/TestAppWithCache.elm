@@ -11,5 +11,5 @@ main =
     TestApp.program
         (Storage.Cache.cache
             (Storage.Debug.storage "local storage" Storage.LocalStorage.storage)
-            (Storage.Debug.storage "example-server (HTTP)" Storage.ExampleServer.storage)
+            (Storage.Debug.storage "example-server (HTTP)" <| Storage.ExampleServer.storage "/")
         )

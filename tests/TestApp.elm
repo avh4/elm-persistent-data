@@ -128,4 +128,9 @@ program storage =
 main : Persistence.Program Never Data Event UiState Msg
 main =
     program
-        (Storage.Debug.storage "example-server (HTTP)" Storage.ExampleServer.storage)
+        (Storage.Debug.storage "example-server (HTTP)" <|
+            Storage.ExampleServer.storage
+                -- If the backend server is running on a different host or port,
+                -- the following string can be "https://myserver.tld/", etc.
+                "/"
+        )
