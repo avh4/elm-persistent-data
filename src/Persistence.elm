@@ -281,6 +281,20 @@ update config msg (Model model) =
             )
 
 
+subscriptions :
+    Config data event state msg
+    -> Model data state
+    -> Sub (Msg event msg)
+subscriptions config =
+    -- TODO: add tests for this
+    \(Model model) ->
+        if model.loaded && model.errors == [] then
+            config.ui.subscriptions model.data model.ui
+                |> Sub.map UiMsg
+        else
+            Sub.none
+
+
 view :
     Config data event state msg
     -> Model data state
@@ -304,14 +318,7 @@ program config =
     Html.program
         { init = init config
         , update = update config
-        , subscriptions =
-            -- TODO: add tests for this
-            \(Model model) ->
-                if model.loaded && model.errors == [] then
-                    config.ui.subscriptions model.data model.ui
-                        |> Sub.map UiMsg
-                else
-                    Sub.none
+        , subscriptions = subscriptions config
         , view = view config
         }
 
@@ -341,6 +348,6 @@ programWithNavigation locationToMessage config =
                        -- probably the API should be changes to prevent that possibility
                        programAndThen (update config (locationToMessage location |> UiMsg))
         , update = update config
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = subscriptions config
         , view = view config
         }
