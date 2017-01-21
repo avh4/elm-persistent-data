@@ -63,22 +63,22 @@ type Msg
     | Add
 
 
-updateUi : Data -> Msg -> UiState -> ( UiState, Cmd Msg, Maybe Event )
+updateUi : Data -> Msg -> UiState -> ( UiState, Cmd Msg, List Event )
 updateUi data msg state =
     case msg of
         Typed string ->
             ( { state | input = string }
             , Cmd.none
-            , Nothing
+            , []
             )
 
         Add ->
             if state.input == "" then
-                ( state, Cmd.none, Nothing )
+                ( state, Cmd.none, [] )
             else
                 ( { state | input = "" }
                 , Cmd.none
-                , Just <| AddItem state.input
+                , [ AddItem state.input ]
                 )
 
 

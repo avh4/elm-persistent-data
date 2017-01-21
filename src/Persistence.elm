@@ -45,7 +45,7 @@ type alias Config data event state msg =
         }
     , ui :
         { init : ( state, Cmd msg )
-        , update : data -> msg -> state -> ( state, Cmd msg, Maybe event )
+        , update : data -> msg -> state -> ( state, Cmd msg, List event )
         , subscriptions : data -> state -> Sub msg
         , view : data -> state -> Html msg
         }
@@ -166,17 +166,17 @@ update config msg (Model model) =
     case msg of
         UiMsg m ->
             let
-                ( newUi, uiCmd, event ) =
+                ( newUi, uiCmd, events ) =
                     config.ui.update model.data m model.ui
 
                 ( newData, writeCmd ) =
-                    case event of
-                        Nothing ->
+                    case events of
+                        [] ->
                             ( model.data, Cmd.none )
 
-                        Just ev ->
-                            ( config.data.update ev model.data
-                            , writeBatch config model.root [ ev ]
+                        _ ->
+                            ( List.foldl config.data.update model.data events
+                            , writeBatch config model.root events
                             )
             in
                 ( Model
