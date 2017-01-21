@@ -304,7 +304,14 @@ program config =
     Html.program
         { init = init config
         , update = update config
-        , subscriptions = \_ -> Sub.none
+        , subscriptions =
+            -- TODO: add tests for this
+            \(Model model) ->
+                if model.loaded && model.errors == [] then
+                    config.ui.subscriptions model.data model.ui
+                        |> Sub.map UiMsg
+                else
+                    Sub.none
         , view = view config
         }
 
