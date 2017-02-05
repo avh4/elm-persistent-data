@@ -25,7 +25,7 @@ cache =
         }
 
 
-{-| An example `Storage` implementation using HTTP.
+{-| An example `Storage` implementation using Local Storage.
 -}
 storage : Storage
 storage =

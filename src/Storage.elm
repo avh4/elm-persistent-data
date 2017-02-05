@@ -1,9 +1,9 @@
-module Storage exposing (Storage, RefStore, ContentStore)
+module Storage exposing (Storage, RefStore, ContentStore, CacheStore)
 
 {-| This is the interface that must be implemented to connect a storage
 implementaiton to `Persistence`.
 
-@docs Storage, RefStore, ContentStore
+@docs Storage, RefStore, ContentStore, CacheStore
 
 -}
 
@@ -46,4 +46,13 @@ The key of any value is the SHA-256 hash of the value.
 type alias ContentStore =
     { read : Hash -> Task String (Maybe String)
     , write : String -> Task String Hash
+    }
+
+
+{-| A mutable store that can store a single value.  There is no gaurantee
+that a stored value will be retrievable later.
+-}
+type alias CacheStore =
+    { read : Task Never (Maybe String)
+    , write : String -> Task Never ()
     }

@@ -27,7 +27,6 @@ import Html exposing (Html)
 import Json.Decode exposing (Decoder)
 import Json.Encode
 import Task exposing (Task)
-import Sha256
 import Persistence.Batch as Batch
 import Storage exposing (Storage)
 import Storage.Hash as Hash exposing (Hash)
@@ -55,6 +54,12 @@ type alias Config data event state msg =
     , appId :
         -- This is used so that multiple apps can use the same storage configuration
         String
+    , localCache :
+        Maybe
+            { encoder : data -> Json.Encode.Value
+            , decoder : Decoder data
+            , store : Storage.CacheStore
+            }
     }
 
 
@@ -91,9 +96,19 @@ init config =
         }
     , Cmd.batch
         [ Cmd.map UiMsg (Tuple.second config.ui.init)
-        , Task.attempt ReadRoot <| config.storage.refs.read (config.appId ++ ".root-v1")
+        , case config.localCache of
+            Nothing ->
+                readRoot config
+
+            Just cacheConfig ->
+                Task.perform ReadCache cacheConfig.store.read
         ]
     )
+
+
+readRoot : Config data event state msg -> Cmd (Msg event msg)
+readRoot config =
+    Task.attempt ReadRoot <| config.storage.refs.read (config.appId ++ ".root-v1")
 
 
 {-| The externally-inspectable state of a persistent program.
@@ -123,6 +138,8 @@ type Msg event msg
     | ReadBatch Hash (List (List event)) (Result String (Maybe String))
     | WriteBatch (Result String Hash)
     | WriteRoot Hash (Result String ())
+    | ReadCache (Maybe String)
+    | WriteCache ()
 
 
 {-| Not sure if this should be exposed... it's needed for testing, though
@@ -143,18 +160,33 @@ readBatch config batch whenDone =
         |> Task.attempt (ReadBatch batch whenDone)
 
 
-writeBatch : Config data event state msg -> Maybe Hash -> List event -> Cmd (Msg event msg)
+writeBatch : Config data event state msg -> Maybe Hash -> List event -> ( Hash, Cmd (Msg event msg) )
 writeBatch config parent events =
     let
         json =
             Batch.encoder config.data.encoder { events = events, parent = parent }
                 |> Json.Encode.encode 0
-
-        key =
-            "sha256-" ++ Sha256.sha256 json
     in
-        config.storage.content.write json
+        ( Hash.ofString json
+        , config.storage.content.write json
             |> Task.attempt WriteBatch
+        )
+
+
+writeToCache : Config data event state msg -> Hash -> data -> Cmd (Msg event msg)
+writeToCache config hash data =
+    case config.localCache of
+        Nothing ->
+            Cmd.none
+
+        Just cacheConfig ->
+            Json.Encode.object
+                [ ( "root", Hash.encode hash )
+                , ( "data", cacheConfig.encoder data )
+                ]
+                |> Json.Encode.encode 0
+                |> cacheConfig.store.write
+                |> Task.perform WriteCache
 
 
 update :
@@ -169,15 +201,23 @@ update config msg (Model model) =
                 ( newUi, uiCmd, events ) =
                     config.ui.update model.data m model.ui
 
-                ( newData, writeCmd ) =
+                ( newData, writeCmd, cacheCmd ) =
                     case events of
                         [] ->
-                            ( model.data, Cmd.none )
+                            ( model.data, Cmd.none, Cmd.none )
 
                         _ ->
-                            ( List.foldl config.data.update model.data events
-                            , writeBatch config model.root events
-                            )
+                            let
+                                newData =
+                                    List.foldl config.data.update model.data events
+
+                                ( expectedHash, writeCmd_ ) =
+                                    writeBatch config model.root events
+                            in
+                                ( newData
+                                , writeCmd_
+                                , writeToCache config expectedHash newData
+                                )
             in
                 ( Model
                     { model
@@ -187,6 +227,7 @@ update config msg (Model model) =
                 , Cmd.batch
                     [ writeCmd
                     , Cmd.map UiMsg uiCmd
+                    , cacheCmd
                     ]
                 )
 
@@ -196,9 +237,12 @@ update config msg (Model model) =
             )
 
         ReadRoot (Ok (Just lastBatchName)) ->
-            ( Model { model | root = Just lastBatchName }
-            , readBatch config lastBatchName []
-            )
+            if Just lastBatchName == model.root then
+                ( Model { model | loaded = True }, Cmd.none )
+            else
+                ( Model { model | root = Just lastBatchName }
+                , readBatch config lastBatchName []
+                )
 
         ReadRoot (Err message) ->
             ( Model
@@ -279,6 +323,43 @@ update config msg (Model model) =
                 }
             , Cmd.none
             )
+
+        ReadCache Nothing ->
+            ( Model model, readRoot config )
+
+        ReadCache (Just json) ->
+            ( case config.localCache of
+                Nothing ->
+                    Model model
+
+                Just cacheConfig ->
+                    let
+                        decoder =
+                            Json.Decode.map2 CacheRecord
+                                (Json.Decode.field "root" <| Hash.decode)
+                                (Json.Decode.field "data" <| cacheConfig.decoder)
+                    in
+                        case Json.Decode.decodeString decoder json of
+                            Ok result ->
+                                Model
+                                    { model
+                                        | data = result.data
+                                        , root = Just result.root
+                                    }
+
+                            Err _ ->
+                                Model model
+            , readRoot config
+            )
+
+        WriteCache () ->
+            ( Model model, Cmd.none )
+
+
+type alias CacheRecord data =
+    { root : Hash
+    , data : data
+    }
 
 
 subscriptions :

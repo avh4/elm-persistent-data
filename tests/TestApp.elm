@@ -16,6 +16,23 @@ type alias Data =
     }
 
 
+dataEncoder : Data -> Json.Encode.Value
+dataEncoder data =
+    Json.Encode.object
+        [ ( "list"
+          , data.list
+                |> List.map Json.Encode.string
+                |> Json.Encode.list
+          )
+        ]
+
+
+dataDecoder : Json.Decode.Decoder Data
+dataDecoder =
+    Json.Decode.map Data
+        (Json.Decode.field "list" <| Json.Decode.list Json.Decode.string)
+
+
 type Event
     = AddItem String
 
@@ -99,8 +116,8 @@ view data state =
         ]
 
 
-program : Storage -> Persistence.Program Never Data Event UiState Msg
-program storage =
+program : Storage -> Maybe Storage.CacheStore -> Persistence.Program Never Data Event UiState Msg
+program storage cacheStore =
     Persistence.program
         { data =
             { init = { list = [] }
@@ -123,6 +140,15 @@ program storage =
                     ]
         , storage = storage
         , appId = "io.github.avh4.elm-persistent-data.test-app"
+        , localCache =
+            cacheStore
+                |> Maybe.map
+                    (\store ->
+                        { encoder = dataEncoder
+                        , decoder = dataDecoder
+                        , store = store
+                        }
+                    )
         }
 
 
@@ -135,3 +161,4 @@ main =
                 -- the following string can be "https://myserver.tld/", etc.
                 "/"
         )
+        Nothing

@@ -49,6 +49,7 @@ start =
                 mocks.writeContent >> TestContext.toTask
             }
         }
+        Nothing
         |> TestContext.start
 
 
