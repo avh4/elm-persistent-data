@@ -163,6 +163,14 @@ all =
                                     { list = [ "world", "hello" ] }
                                     { input = "" }
                                 )
+            , test "when loading the root fails, retry after 5 seconds" <|
+                \() ->
+                    start
+                        |> TestContext.resolveMockTask
+                            (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1")
+                            (Err "Network error")
+                        |> TestContext.advanceTime 5000
+                        |> expectMockTask (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1")
 
             -- TODO: error loading root
             -- TODO: error loading batch

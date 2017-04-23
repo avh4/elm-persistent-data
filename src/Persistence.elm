@@ -30,8 +30,10 @@ import Json.Decode exposing (Decoder)
 import Json.Encode
 import Task exposing (Task)
 import Persistence.Batch as Batch
+import Process
 import Storage exposing (Storage)
 import Storage.Hash as Hash exposing (Hash)
+import Time
 import Navigation
 
 
@@ -109,9 +111,14 @@ init config =
     )
 
 
+readRootTask : Config data event state msg -> Task String (Maybe Hash)
+readRootTask config =
+    config.storage.refs.read (config.appId ++ ".root-v1")
+
+
 readRoot : Config data event state msg -> Cmd (Msg event msg)
 readRoot config =
-    Task.attempt ReadRoot <| config.storage.refs.read (config.appId ++ ".root-v1")
+    Task.attempt ReadRoot (readRootTask config)
 
 
 {-| The externally-inspectable state of a persistent program.
@@ -252,7 +259,9 @@ update config msg (Model model) =
                 { model
                     | errors = ("Error reading root: " ++ message) :: model.errors
                 }
-            , Cmd.none
+            , Process.sleep (5 * Time.second)
+                |> Task.andThen (\_ -> readRootTask config)
+                |> Task.attempt ReadRoot
             )
 
         ReadBatch id whenDone (Ok (Just batchJson)) ->
