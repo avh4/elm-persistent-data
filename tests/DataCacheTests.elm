@@ -16,36 +16,36 @@ all =
                 let
                     batch =
                         """{"events":[{"tag":"AddItem","$0":"buy carrots"}],"parent":null}"""
+
+                    finalData =
+                        """{"root":\"""" ++ Hash.toString (hash batch) ++ """","data":{"list":["buy carrots"]}}"""
                 in
                     start
-                        |> foldResults
-                            [ resolve mocks.readData Nothing
-                            , resolve (mocks.readRef appId) Nothing
-                            , updateUi (TestApp.Typed "buy carrots")
-                            , updateUi (TestApp.Add)
-                            , resolve (mocks.writeContent batch) (hash batch)
-                            ]
-                        |> expectMockTask (mocks.writeData """{"root":"sha256-9ae929fad3560cfa04dcd65f80ea99df2bcc2d7bd0d7397777425f128d43435f","data":{"list":["buy carrots"]}}""")
+                        |> resolve mocks.readData Nothing
+                        |> resolve (mocks.readRef appId) Nothing
+                        |> updateUi (TestApp.Typed "buy carrots")
+                        |> updateUi (TestApp.Add)
+                        |> resolve (mocks.writeContent batch) (hash batch)
+                        |> expectMockTask (mocks.writeData finalData)
         , test "initial read, with no cached data" <|
             \() ->
                 start
-                    |> foldResults [ resolve mocks.readData Nothing ]
+                    |> resolve mocks.readData Nothing
                     |> expectMockTask (mocks.readRef appId)
         , test "initial read, with cache and no new events" <|
             \() ->
                 start
-                    |> foldResults
-                        [ resolve mocks.readData (Just """{"root":"sha256-d5509674058d858ed72c44396671a1c6ddab91730a7af44799ad1e893fa64005","data":{"list":["XYZZY"]}}""")
-                        , resolve (mocks.readRef appId) (Just <| hash "__ROOT__")
-                        ]
+                    |> resolve mocks.readData (Just """{"root":"sha256-d5509674058d858ed72c44396671a1c6ddab91730a7af44799ad1e893fa64005","data":{"list":["XYZZY"]}}""")
+                    |> resolve (mocks.readRef appId) (Just <| hash "__ROOT__")
                     |> expectCurrent
                         (Persistence.Ready
                             { list = [ "XYZZY" ] }
                             { input = "" }
                         )
-          -- TODO: initial read, with new remote data and a common ancestor
-          -- TODO: initial read, with new remote data and no common ancestor
-          -- TODO: should write cache when initial events are loaded remotely
+
+        -- TODO: initial read, with new remote data and a common ancestor
+        -- TODO: initial read, with new remote data and no common ancestor
+        -- TODO: should write cache when initial events are loaded remotely
         ]
 
 
@@ -108,9 +108,9 @@ start =
 updateUi :
     msg
     -> TestContext model (Persistence.Msg event msg)
-    -> Result error (TestContext model (Persistence.Msg event msg))
+    -> TestContext model (Persistence.Msg event msg)
 updateUi uiMsg =
-    TestContext.update (uiMsg |> Persistence.uimsg) >> Ok
+    TestContext.update (uiMsg |> Persistence.uimsg)
 
 
 foldResults : List (a -> Result x a) -> a -> Result x a
@@ -120,10 +120,10 @@ foldResults steps init =
 
 expectMockTask :
     MockTask x a
-    -> Result String (TestContext model msg)
+    -> TestContext model msg
     -> Expectation
 expectMockTask =
-    TestContext.expectMockTask >> expectOk
+    TestContext.expectMockTask
 
 
 expectOk : (a -> Expectation) -> Result String a -> Expectation
@@ -140,19 +140,18 @@ resolve :
     MockTask error a
     -> a
     -> TestContext model msg
-    -> Result String (TestContext model msg)
+    -> TestContext model msg
 resolve mock value =
     TestContext.resolveMockTask mock (Ok value)
 
 
 expectCurrent :
     Persistence.PersistenceState data ui
-    -> Result String (TestContext (Persistence.Model data ui) msg)
+    -> TestContext (Persistence.Model data ui) msg
     -> Expectation
 expectCurrent expected =
-    expectOk
-        (TestContext.model
-            >> Persistence.current
+    TestContext.expectModel
+        (Persistence.current
             >> Expect.equal expected
         )
 

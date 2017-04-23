@@ -4,7 +4,6 @@ import Test exposing (..)
 import Expect exposing (Expectation)
 import TestContextWithMocks as TestContext exposing (TestContext, MockTask, mockTask, resolveMockTask)
 import Storage.Hash as Hash exposing (Hash)
-import Storage exposing (ContentStore)
 import Storage.Cache as Cache
 import Task exposing (Task)
 import Html
@@ -51,13 +50,18 @@ start task =
         |> TestContext.start
 
 
-testTask : String -> Task x a -> List (TestContext (Maybe (Result x a)) (Result x a) -> Result String (TestContext (Maybe (Result x a)) (Result x a))) -> Result x a -> Test
+testTask :
+    String
+    -> Task x a
+    -> List (TestContext (Maybe (Result x a)) (Result x a) -> TestContext (Maybe (Result x a)) (Result x a))
+    -> Result x a
+    -> Test
 testTask name task steps expected =
     test name <|
         \() ->
             testResults (start task)
                 steps
-                (TestContext.model >> Expect.equal (Just expected))
+                (TestContext.expectModel <| Expect.equal (Just expected))
 
 
 all : Test
@@ -95,7 +99,7 @@ expectOk expectation result =
             expectation a
 
 
-testResults : a -> List (a -> Result String a) -> (a -> Expectation) -> Expectation
+testResults : a -> List (a -> a) -> (a -> Expectation) -> Expectation
 testResults init steps expect =
-    List.foldl (\f a -> Result.andThen f a) (Ok init) steps
-        |> expectOk expect
+    List.foldl (\f a -> f a) init steps
+        |> expect
