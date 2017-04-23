@@ -260,16 +260,24 @@ update config msg (Model model) =
                 Ok batch ->
                     case batch.parent of
                         Nothing ->
-                            ( Model
-                                { model
-                                    | loaded = True
-                                    , data =
-                                        (batch.events :: whenDone)
-                                            |> List.concat
-                                            |> List.foldl config.data.update model.data
-                                }
-                            , Cmd.none
-                            )
+                            let
+                                newData =
+                                    (batch.events :: whenDone)
+                                        |> List.concat
+                                        |> List.foldl config.data.update model.data
+                            in
+                                ( Model
+                                    { model
+                                        | loaded = True
+                                        , data = newData
+                                    }
+                                , case model.root of
+                                    Nothing ->
+                                        Cmd.none
+
+                                    Just root ->
+                                        writeToCache config root newData
+                                )
 
                         Just parent ->
                             ( Model model, readBatch config parent (batch.events :: whenDone) )

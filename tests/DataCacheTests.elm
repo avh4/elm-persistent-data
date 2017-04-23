@@ -45,7 +45,20 @@ all =
 
         -- TODO: initial read, with new remote data and a common ancestor
         -- TODO: initial read, with new remote data and no common ancestor
-        -- TODO: should write cache when initial events are loaded remotely
+        , test "initial read with remote data should write to the cache" <|
+            \() ->
+                let
+                    batch1 =
+                        """{"events":[{"tag":"AddItem","$0":"buy carrots"}],"parent":null}"""
+
+                    finalData =
+                        """{"root":\"""" ++ Hash.toString (hash batch1) ++ """","data":{"list":["buy carrots"]}}"""
+                in
+                    start
+                        |> resolve mocks.readData Nothing
+                        |> resolve (mocks.readRef appId) (Just <| hash batch1)
+                        |> resolve (mocks.readContent <| hash batch1) (Just batch1)
+                        |> expectMockTask (mocks.writeData finalData)
         ]
 
 

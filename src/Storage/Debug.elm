@@ -1,12 +1,12 @@
-module Storage.Debug exposing (storage, refStore, contentStore)
+module Storage.Debug exposing (storage, refStore, contentStore, cache)
 
 {-| Add debugging out to a `Storage` implementation.
 
-@docs storage, refStore, contentStore
+@docs storage, refStore, contentStore, cache
 
 -}
 
-import Storage exposing (Storage, RefStore, ContentStore)
+import Storage exposing (Storage, RefStore, ContentStore, CacheStore)
 import Task
 import Storage.Hash as Hash
 
@@ -51,4 +51,18 @@ contentStore label impl =
             impl.write (Debug.log (label ++ ": content.write") value)
                 |> Task.map (Debug.log (label ++ ": content.write: Ok"))
                 |> Task.mapError (Debug.log (label ++ ": content.write: Err"))
+    }
+
+
+{-| Add debugging output to a `CacheStore`
+-}
+cache : String -> CacheStore -> CacheStore
+cache label impl =
+    { read =
+        impl.read
+            |> Task.map (Debug.log (label ++ ": cache.read"))
+    , write =
+        \value ->
+            impl.write (Debug.log (label ++ ": cache.write") value)
+                |> Task.map (Debug.log (label ++ ": cache.write"))
     }

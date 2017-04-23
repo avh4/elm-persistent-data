@@ -5,21 +5,28 @@ import Storage.Debug
 import Storage.Cache
 import Storage.LocalStorage
 import Storage.ExampleServer
+import Persistence
 import PersistentCache
 import Json.Decode
 import Json.Encode
 
 
+main : Persistence.Program Never TestApp.Data TestApp.Event TestApp.UiState TestApp.Msg
 main =
     TestApp.program
         (Storage.Cache.cache
-            (Storage.Debug.storage "local storage" Storage.LocalStorage.storage)
-            (Storage.Debug.storage "example-server (HTTP)" <| Storage.ExampleServer.storage "/")
+            (Storage.Debug.storage "local storage"
+                Storage.LocalStorage.storage
+            )
+            (Storage.Debug.storage "example-server (HTTP)" <|
+                Storage.ExampleServer.storage "/"
+            )
         )
-        (Just
-            { read = PersistentCache.get cache ".data"
-            , write = PersistentCache.add cache ".data"
-            }
+        (Just <|
+            Storage.Debug.cache "data cache"
+                { read = PersistentCache.get cache ".data"
+                , write = PersistentCache.add cache ".data"
+                }
         )
 
 
