@@ -10,6 +10,7 @@
         "Persistence",
         "Storage",
         "Storage.Debug",
+        "Storage.Delay",
         "Storage.Hash",
         "Storage.ExampleServer"
     ],
