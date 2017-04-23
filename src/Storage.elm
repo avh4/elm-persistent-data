@@ -49,7 +49,7 @@ type alias ContentStore =
     }
 
 
-{-| A mutable store that can store a single value.  There is no gaurantee
+{-| A mutable store that can store a single value. There is no gaurantee
 that a stored value will be retrievable later.
 -}
 type alias CacheStore =

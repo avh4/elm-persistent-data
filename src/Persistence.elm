@@ -13,9 +13,11 @@ module Persistence
 
 {-|
 
+
 ## Creating a persistent program
 
 @docs Config, Program, program, programWithNavigation
+
 
 ## Stuff you shouldn't normally need
 
@@ -66,6 +68,7 @@ type alias Config data event state msg =
 {-| A `Program` type alias for persistent programs.
 
     main : Persistence.Program Flags Data Event State Msg
+
 -}
 type alias Program flags data event state msg =
     Platform.Program flags (Model data state) (Msg event msg)

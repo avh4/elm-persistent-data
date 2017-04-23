@@ -3,6 +3,7 @@ module Storage.Debug exposing (storage, refStore, contentStore)
 {-| Add debugging out to a `Storage` implementation.
 
 @docs storage, refStore, contentStore
+
 -}
 
 import Storage exposing (Storage, RefStore, ContentStore)
