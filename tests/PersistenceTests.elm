@@ -130,13 +130,10 @@ all =
                 \() ->
                     start
                         |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") Nothing
-                        |> TestContext.expectModel
-                            (Persistence.current
-                                >> Expect.equal
-                                    (Persistence.Ready
-                                        { list = [] }
-                                        { input = "" }
-                                    )
+                        |> expectCurrent
+                            (Persistence.Ready
+                                { list = [] }
+                                { input = "" }
                             )
             , test "with previous data in a single batch, when load succeeds, shows previous data" <|
                 \() ->
@@ -147,16 +144,26 @@ all =
                         start
                             |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch)
                             |> resolve (mocks.readContent (hash batch)) (Just batch)
-                            |> TestContext.expectModel
-                                (Persistence.current
-                                    >> Expect.equal
-                                        (Persistence.Ready
-                                            { list = [ "hello" ] }
-                                            { input = "" }
-                                        )
+                            |> expectCurrent
+                                (Persistence.Ready
+                                    { list = [ "hello" ] }
+                                    { input = "" }
+                                )
+            , test "when batch contains multiple events, they replay in the correct order" <|
+                \() ->
+                    let
+                        batch =
+                            """{"events":[{"tag":"AddItem","$0":"hello"},{"tag":"AddItem","$0":"world"}],"parent":null}"""
+                    in
+                        start
+                            |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch)
+                            |> resolve (mocks.readContent (hash batch)) (Just batch)
+                            |> expectCurrent
+                                (Persistence.Ready
+                                    { list = [ "world", "hello" ] }
+                                    { input = "" }
                                 )
 
-            -- TODO: verify ordering of event replay
             -- TODO: error loading root
             -- TODO: error loading batch
             -- TODO: batch doesn't exist (fatal error)
