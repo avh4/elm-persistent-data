@@ -189,6 +189,7 @@ all =
                             |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch2)
                             |> resolve (mocks.readContent (hash batch2)) (Just batch2)
                             |> resolve (mocks.readContent (hash batch1)) (Just batch1)
+                            |> resolve (mocks.readContent (hash batch2)) (Just batch2)
                             |> expectCurrent
                                 (Persistence.Ready
                                     { list = [ "world", "hello" ] }

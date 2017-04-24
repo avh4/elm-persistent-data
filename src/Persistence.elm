@@ -145,7 +145,8 @@ current (Model model) =
 type Msg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe Hash))
-    | ReadBatch Hash (List (List event)) (Result String (Maybe String))
+    | ReadHistory Hash (List Hash) (Result String (Maybe String))
+    | ReadBatch (List Hash) (Result String (Maybe String))
     | WriteBatch (Result String Hash)
     | WriteRoot Hash (Result String ())
     | ReadCache (Maybe String)
@@ -164,10 +165,10 @@ writeRoot config previousRoot lastBatchId =
     config.storage.refs.write (config.appId ++ ".root-v1") previousRoot lastBatchId
 
 
-readBatch : Config data event state msg -> Hash -> List (List event) -> Cmd (Msg event msg)
-readBatch config batch whenDone =
+readHistory : Config data event state msg -> Hash -> List Hash -> Cmd (Msg event msg)
+readHistory config batch whenDone =
     config.storage.content.read batch
-        |> Task.attempt (ReadBatch batch whenDone)
+        |> Task.attempt (ReadHistory batch whenDone)
 
 
 writeBatch : Config data event state msg -> Maybe Hash -> List event -> ( Hash, Cmd (Msg event msg) )
@@ -251,7 +252,7 @@ update config msg (Model model) =
                 ( Model { model | loaded = True }, Cmd.none )
             else
                 ( Model { model | root = Just lastBatchName }
-                , readBatch config lastBatchName []
+                , readHistory config lastBatchName []
                 )
 
         ReadRoot (Err message) ->
@@ -264,17 +265,54 @@ update config msg (Model model) =
                 |> Task.attempt ReadRoot
             )
 
-        ReadBatch id whenDone (Ok (Just batchJson)) ->
+        ReadHistory id whenDone (Ok (Just batchJson)) ->
             case Json.Decode.decodeString (Batch.decoder config.data.decoder) batchJson of
                 Ok batch ->
                     case batch.parent of
                         Nothing ->
-                            let
-                                newData =
-                                    (batch.events :: whenDone)
-                                        |> List.concat
-                                        |> List.foldl config.data.update model.data
-                            in
+                            update config
+                                (ReadBatch whenDone (Ok <| Just batchJson))
+                                (Model model)
+
+                        Just parent ->
+                            ( Model model
+                            , readHistory config parent (id :: whenDone)
+                            )
+
+                Err message ->
+                    ( Model
+                        { model
+                            | errors = ("Error decoding batch " ++ toString id ++ ": " ++ message) :: model.errors
+                        }
+                    , Cmd.none
+                    )
+
+        ReadHistory id _ (Ok Nothing) ->
+            ( Model
+                { model
+                    | errors = ("Fatal error: a known batch of events is missing from the storage backend: " ++ toString id) :: model.errors
+                }
+            , Cmd.none
+            )
+
+        ReadHistory id _ (Err message) ->
+            ( Model
+                { model
+                    | errors = ("Error reading batch " ++ toString id ++ ": " ++ message) :: model.errors
+                }
+            , Cmd.none
+            )
+
+        ReadBatch rest (Ok (Just batchJson)) ->
+            case Json.Decode.decodeString (Batch.decoder config.data.decoder) batchJson of
+                Ok batch ->
+                    let
+                        newData =
+                            batch.events
+                                |> List.foldl config.data.update model.data
+                    in
+                        case rest of
+                            [] ->
                                 ( Model
                                     { model
                                         | loaded = True
@@ -288,29 +326,35 @@ update config msg (Model model) =
                                         writeToCache config root newData
                                 )
 
-                        Just parent ->
-                            ( Model model, readBatch config parent (batch.events :: whenDone) )
+                            next :: rest_ ->
+                                ( Model
+                                    { model
+                                        | data = newData
+                                    }
+                                , config.storage.content.read next
+                                    |> Task.attempt (ReadBatch rest_)
+                                )
 
                 Err message ->
                     ( Model
                         { model
-                            | errors = ("Error decoding batch " ++ toString id ++ ": " ++ message) :: model.errors
+                            | errors = ("Error decoding batch: " ++ message) :: model.errors
                         }
                     , Cmd.none
                     )
 
-        ReadBatch id _ (Ok Nothing) ->
+        ReadBatch _ (Ok Nothing) ->
             ( Model
                 { model
-                    | errors = ("Fatal error: a known batch of events is missing from the storage backend: " ++ toString id) :: model.errors
+                    | errors = ("Fatal error: a known batch of events is missing from the storage backend") :: model.errors
                 }
             , Cmd.none
             )
 
-        ReadBatch id _ (Err message) ->
+        ReadBatch _ (Err message) ->
             ( Model
                 { model
-                    | errors = ("Error reading batch " ++ toString id ++ ": " ++ message) :: model.errors
+                    | errors = ("Error reading batch: " ++ message) :: model.errors
                 }
             , Cmd.none
             )
