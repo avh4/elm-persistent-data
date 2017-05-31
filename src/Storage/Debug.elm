@@ -1,4 +1,4 @@
-module Storage.Debug exposing (storage, refStore, contentStore, cache)
+module Storage.Debug exposing (cache, contentStore, refStore, storage)
 
 {-| Add debugging out to a `Storage` implementation.
 
@@ -6,9 +6,9 @@ module Storage.Debug exposing (storage, refStore, contentStore, cache)
 
 -}
 
-import Storage exposing (Storage, RefStore, ContentStore, CacheStore)
-import Task
+import Storage exposing (CacheStore, ContentStore, RefStore, Storage)
 import Storage.Hash as Hash
+import Task
 
 
 {-| Add debugging out to a `Storage` implementation.

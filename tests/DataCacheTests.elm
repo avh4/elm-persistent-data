@@ -1,11 +1,11 @@
 module DataCacheTests exposing (all)
 
-import Test exposing (..)
 import Expect exposing (Expectation)
-import TestContextWithMocks as TestContext exposing (TestContext, MockTask)
-import Storage.Hash as Hash exposing (Hash)
 import Persistence
+import Storage.Hash as Hash exposing (Hash)
+import Test exposing (..)
 import TestApp
+import TestContextWithMocks as TestContext exposing (MockTask, TestContext)
 
 
 all : Test
@@ -20,13 +20,13 @@ all =
                     finalData =
                         """{"root":\"""" ++ Hash.toString (hash batch) ++ """","data":{"list":["buy carrots"]}}"""
                 in
-                    start
-                        |> resolve mocks.readData Nothing
-                        |> resolve (mocks.readRef appId) Nothing
-                        |> updateUi (TestApp.Typed "buy carrots")
-                        |> updateUi (TestApp.Add)
-                        |> resolve (mocks.writeContent batch) (hash batch)
-                        |> expectMockTask (mocks.writeData finalData)
+                start
+                    |> resolve mocks.readData Nothing
+                    |> resolve (mocks.readRef appId) Nothing
+                    |> updateUi (TestApp.Typed "buy carrots")
+                    |> updateUi TestApp.Add
+                    |> resolve (mocks.writeContent batch) (hash batch)
+                    |> expectMockTask (mocks.writeData finalData)
         , test "initial read, with no cached data" <|
             \() ->
                 start
@@ -54,11 +54,11 @@ all =
                     finalData =
                         """{"root":\"""" ++ Hash.toString (hash batch1) ++ """","data":{"list":["buy carrots"]}}"""
                 in
-                    start
-                        |> resolve mocks.readData Nothing
-                        |> resolve (mocks.readRef appId) (Just <| hash batch1)
-                        |> resolve (mocks.readContent <| hash batch1) (Just batch1)
-                        |> expectMockTask (mocks.writeData finalData)
+                start
+                    |> resolve mocks.readData Nothing
+                    |> resolve (mocks.readRef appId) (Just <| hash batch1)
+                    |> resolve (mocks.readContent <| hash batch1) (Just batch1)
+                    |> expectMockTask (mocks.writeData finalData)
         ]
 
 

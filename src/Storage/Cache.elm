@@ -1,8 +1,8 @@
 module Storage.Cache exposing (cache, contentStore)
 
+import Process
 import Storage exposing (Storage)
 import Task
-import Process
 
 
 cache : Storage -> Storage -> Storage

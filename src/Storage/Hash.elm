@@ -1,4 +1,4 @@
-module Storage.Hash exposing (Hash(..), encode, decode, fromString, toString, ofString)
+module Storage.Hash exposing (Hash(..), decode, encode, fromString, ofString, toString)
 
 {-| This is the interface that must be implemented to connect a storage
 implementaiton to `Persistence`.
@@ -58,7 +58,7 @@ fromString string =
 -}
 toString : Hash -> String
 toString (Sha256 hash) =
-    ("sha256-" ++ hash)
+    "sha256-" ++ hash
 
 
 {-| Calculate the `Hash` of a String.

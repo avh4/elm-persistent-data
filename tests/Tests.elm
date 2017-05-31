@@ -1,9 +1,9 @@
 module Tests exposing (..)
 
-import Test exposing (..)
+import DataCacheTests
 import PersistenceTests
 import Storage.CacheTests
-import DataCacheTests
+import Test exposing (..)
 
 
 all : Test

@@ -1,4 +1,4 @@
-module Storage exposing (Storage, RefStore, ContentStore, CacheStore)
+module Storage exposing (CacheStore, ContentStore, RefStore, Storage)
 
 {-| This is the interface that must be implemented to connect a storage
 implementaiton to `Persistence`.
@@ -7,8 +7,8 @@ implementaiton to `Persistence`.
 
 -}
 
-import Task exposing (Task)
 import Storage.Hash exposing (Hash)
+import Task exposing (Task)
 
 
 {-| A Storage implementation consists of a `RefStore` and a `ContentStore`.

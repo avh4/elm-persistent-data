@@ -1,4 +1,4 @@
-module Storage.Delay exposing (storage, refStore, contentStore, cache)
+module Storage.Delay exposing (cache, contentStore, refStore, storage)
 
 {-| Add delays to a `Storage` implementation to assist in debugging.
 
@@ -7,7 +7,7 @@ module Storage.Delay exposing (storage, refStore, contentStore, cache)
 -}
 
 import Process
-import Storage exposing (Storage, RefStore, ContentStore, CacheStore)
+import Storage exposing (CacheStore, ContentStore, RefStore, Storage)
 import Task
 import Time exposing (Time)
 

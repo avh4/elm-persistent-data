@@ -1,14 +1,14 @@
 module Persistence
     exposing
-        ( Program
-        , Config
+        ( Config
         , Model
         , Msg
-        , uimsg
+        , PersistenceState(..)
+        , Program
+        , current
         , program
         , programWithNavigation
-        , PersistenceState(..)
-        , current
+        , uimsg
         )
 
 {-|
@@ -28,13 +28,13 @@ module Persistence
 import Html exposing (Html)
 import Json.Decode exposing (Decoder)
 import Json.Encode
-import Task exposing (Task)
+import Navigation
 import Persistence.Batch as Batch
 import Process
 import Storage exposing (Storage)
 import Storage.Hash as Hash exposing (Hash)
+import Task exposing (Task)
 import Time
-import Navigation
 
 
 {-| Configuration for a persistent program.
@@ -178,10 +178,10 @@ writeBatch config parent events =
             Batch.encoder config.data.encoder { events = events, parent = parent }
                 |> Json.Encode.encode 0
     in
-        ( Hash.ofString json
-        , config.storage.content.write json
-            |> Task.attempt WriteBatch
-        )
+    ( Hash.ofString json
+    , config.storage.content.write json
+        |> Task.attempt WriteBatch
+    )
 
 
 writeToCache : Config data event state msg -> Hash -> data -> Cmd (Msg event msg)
@@ -225,22 +225,22 @@ update config msg (Model model) =
                                 ( expectedHash, writeCmd_ ) =
                                     writeBatch config model.root events
                             in
-                                ( newData
-                                , writeCmd_
-                                , writeToCache config expectedHash newData
-                                )
+                            ( newData
+                            , writeCmd_
+                            , writeToCache config expectedHash newData
+                            )
             in
-                ( Model
-                    { model
-                        | ui = newUi
-                        , data = newData
-                    }
-                , Cmd.batch
-                    [ writeCmd
-                    , Cmd.map UiMsg uiCmd
-                    , cacheCmd
-                    ]
-                )
+            ( Model
+                { model
+                    | ui = newUi
+                    , data = newData
+                }
+            , Cmd.batch
+                [ writeCmd
+                , Cmd.map UiMsg uiCmd
+                , cacheCmd
+                ]
+            )
 
         ReadRoot (Ok Nothing) ->
             ( Model { model | loaded = True, root = Nothing }
@@ -311,29 +311,29 @@ update config msg (Model model) =
                             batch.events
                                 |> List.foldl config.data.update model.data
                     in
-                        case rest of
-                            [] ->
-                                ( Model
-                                    { model
-                                        | loaded = True
-                                        , data = newData
-                                    }
-                                , case model.root of
-                                    Nothing ->
-                                        Cmd.none
+                    case rest of
+                        [] ->
+                            ( Model
+                                { model
+                                    | loaded = True
+                                    , data = newData
+                                }
+                            , case model.root of
+                                Nothing ->
+                                    Cmd.none
 
-                                    Just root ->
-                                        writeToCache config root newData
-                                )
+                                Just root ->
+                                    writeToCache config root newData
+                            )
 
-                            next :: rest_ ->
-                                ( Model
-                                    { model
-                                        | data = newData
-                                    }
-                                , config.storage.content.read next
-                                    |> Task.attempt (ReadBatch rest_)
-                                )
+                        next :: rest_ ->
+                            ( Model
+                                { model
+                                    | data = newData
+                                }
+                            , config.storage.content.read next
+                                |> Task.attempt (ReadBatch rest_)
+                            )
 
                 Err message ->
                     ( Model
@@ -346,7 +346,7 @@ update config msg (Model model) =
         ReadBatch _ (Ok Nothing) ->
             ( Model
                 { model
-                    | errors = ("Fatal error: a known batch of events is missing from the storage backend") :: model.errors
+                    | errors = "Fatal error: a known batch of events is missing from the storage backend" :: model.errors
                 }
             , Cmd.none
             )
@@ -403,16 +403,16 @@ update config msg (Model model) =
                                 (Json.Decode.field "root" <| Hash.decode)
                                 (Json.Decode.field "data" <| cacheConfig.decoder)
                     in
-                        case Json.Decode.decodeString decoder json of
-                            Ok result ->
-                                Model
-                                    { model
-                                        | data = result.data
-                                        , root = Just result.root
-                                    }
+                    case Json.Decode.decodeString decoder json of
+                        Ok result ->
+                            Model
+                                { model
+                                    | data = result.data
+                                    , root = Just result.root
+                                }
 
-                            Err _ ->
-                                Model model
+                        Err _ ->
+                            Model model
             , readRoot config
             )
 
@@ -474,7 +474,7 @@ programAndThen next ( a, cmdA ) =
         ( b, cmdB ) =
             next a
     in
-        ( b, Cmd.batch [ cmdA, cmdB ] )
+    ( b, Cmd.batch [ cmdA, cmdB ] )
 
 
 {-| Create a persistent program with navigation (see elm-lang/navigation).

@@ -1,11 +1,11 @@
-module TestApp exposing (Data, Event, UiState, Msg(..), program)
+module TestApp exposing (Data, Event, Msg(..), UiState, program)
 
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Persistence
 import Json.Decode
 import Json.Encode
+import Persistence
 import Storage exposing (Storage)
 import Storage.Debug
 import Storage.ExampleServer
@@ -48,10 +48,10 @@ decoder =
                         Json.Decode.field "$0" Json.Decode.string
 
                 _ ->
-                    Json.Decode.fail ("Not valid pattern for decoder to Event. Pattern: " ++ (toString tag))
+                    Json.Decode.fail ("Not valid pattern for decoder to Event. Pattern: " ++ toString tag)
     in
-        Json.Decode.field "tag" Json.Decode.string
-            |> Json.Decode.andThen dispatch
+    Json.Decode.field "tag" Json.Decode.string
+        |> Json.Decode.andThen dispatch
 
 
 encoder : Event -> Json.Encode.Value

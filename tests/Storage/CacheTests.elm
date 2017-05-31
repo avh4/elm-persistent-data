@@ -1,12 +1,12 @@
 module Storage.CacheTests exposing (all)
 
-import Test exposing (..)
 import Expect exposing (Expectation)
-import TestContextWithMocks as TestContext exposing (TestContext, MockTask, mockTask, resolveMockTask)
-import Storage.Hash as Hash exposing (Hash)
-import Storage.Cache as Cache
-import Task exposing (Task)
 import Html
+import Storage.Cache as Cache
+import Storage.Hash as Hash exposing (Hash)
+import Task exposing (Task)
+import Test exposing (..)
+import TestContextWithMocks as TestContext exposing (MockTask, TestContext, mockTask, resolveMockTask)
 
 
 fastRead : Hash -> MockTask String (Maybe String)
