@@ -11,6 +11,7 @@
     "exposed-modules": [],
     "native-modules": true,
     "dependencies": {
+        "avh4/elm-dropbox": "1.1.0 <= v < 2.0.0",
         "avh4/elm-fifo": "1.0.3 <= v < 2.0.0",
         "billstclair/elm-sha256": "1.0.5 <= v < 2.0.0",
         "eeue56/elm-html-test": "3.1.1 <= v < 4.0.0",

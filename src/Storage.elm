@@ -26,7 +26,7 @@ import Task exposing (Task)
 
 -}
 type alias Storage =
-    { refs : RefStore Hash
+    { refs : RefStore Hash -- TODO: should just be RefStore String? maybe inline String?
     , content : ContentStore
     }
 
@@ -44,7 +44,9 @@ type alias RefStore value =
 The key of any value is the SHA-256 hash of the value.
 -}
 type alias ContentStore =
-    { read : Hash -> Task String (Maybe String)
+    { read :
+        Hash
+        -> Task String (Maybe String) -- TODO: should just be Task String String? (not existing is a failure, right?)
     , write : String -> Task String Hash
     }
 
