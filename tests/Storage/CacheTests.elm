@@ -2,6 +2,7 @@ module Storage.CacheTests exposing (all)
 
 import Expect exposing (Expectation)
 import Html
+import Storage
 import Storage.Cache as Cache
 import Storage.Hash as Hash exposing (Hash)
 import Task exposing (Task)
@@ -29,6 +30,7 @@ slowWrite value =
     mockTask ("slow.write " ++ value)
 
 
+cache : Storage.ContentStore
 cache =
     Cache.contentStore
         { read = fastRead >> TestContext.toTask
@@ -85,6 +87,16 @@ all =
                         , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
                         ]
                         (TestContext.expectMockTask (fastWrite "ABC"))
+            ]
+        , describe "write"
+            [ testTask "when slow store succeeds, succeeds"
+                (cache.write "ABC")
+                [ resolveMockTask (slowWrite "ABC") (Ok <| Hash.ofString "ABC") ]
+                (Ok <| Hash.ofString "ABC")
+            , testTask "when slow store fails, fails"
+                (cache.write "ABC")
+                [ resolveMockTask (slowWrite "ABC") (Err "X") ]
+                (Err "X")
             ]
         ]
 
