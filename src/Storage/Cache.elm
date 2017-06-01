@@ -17,6 +17,7 @@ contentStore fast slow =
     { read =
         \hash ->
             fast.read hash
+                |> Task.onError (\_ -> Task.succeed Nothing)
                 |> Task.andThen
                     (\fastValue ->
                         case fastValue of

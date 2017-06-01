@@ -87,6 +87,25 @@ all =
                         , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
                         ]
                         (TestContext.expectMockTask (fastWrite "ABC"))
+            , testTask "when slow store fails, fails"
+                (cache.read (Hash.ofString "ABC"))
+                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok Nothing)
+                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Err "X")
+                ]
+                (Err "X")
+            , testTask "when fast store fails, ignores the failure"
+                (cache.read (Hash.ofString "ABC"))
+                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Err "X")
+                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
+                ]
+                (Ok <| Just "ABC")
+            , testTask "when write to fast store fails, ignores the failure"
+                (cache.read (Hash.ofString "ABC"))
+                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok Nothing)
+                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
+                , resolveMockTask (fastWrite "ABC") (Err "X")
+                ]
+                (Ok <| Just "ABC")
             ]
         , describe "write"
             [ testTask "when slow store succeeds, succeeds"
