@@ -19,18 +19,18 @@ type alias AuthProgram flags auth model msg =
     }
 
 
-type alias Config flags auth model msg =
+type alias Config flags model msg =
     { onLocationChange : Maybe (Location -> msg)
-    , init : flags -> auth -> Location -> ( model, Cmd msg )
+    , init : flags -> Location -> ( model, Cmd msg )
     , update : msg -> model -> ( model, Cmd msg )
     , subscriptions : model -> Sub msg
     , view : model -> Html msg
     }
 
 
-type Model flags authModel model
+type Model flags authModel model msg
     = Unauthed flags Location authModel
-    | Authed model
+    | Authed (Config flags model msg) model
 
 
 type Msg authMsg msg
@@ -41,36 +41,36 @@ type Msg authMsg msg
 
 program :
     AuthProgram flags auth authModel authMsg
-    -> Config flags auth model msg
-    -> Program flags (Model flags authModel model) (Msg authMsg msg)
-program auth config =
+    -> (auth -> Config flags model msg)
+    -> Program flags (Model flags authModel model msg) (Msg authMsg msg)
+program auth ready =
     Navigation.programWithFlags
         LocationChange
-        { init = init auth config
-        , update = update auth config
-        , subscriptions = subscriptions auth config
-        , view = view auth config
+        { init = init auth ready
+        , update = update auth ready
+        , subscriptions = subscriptions auth
+        , view = view auth
         }
 
 
 init :
     AuthProgram flags auth authModel authMsg
-    -> Config flags auth model msg
+    -> (auth -> Config flags model msg)
     -> flags
     -> Location
-    -> ( Model flags authModel model, Cmd (Msg authMsg msg) )
-init auth config flags location =
+    -> ( Model flags authModel model msg, Cmd (Msg authMsg msg) )
+init auth ready flags location =
     auth.init flags location
-        |> handleAuthResult config flags location
+        |> handleAuthResult ready flags location
 
 
 handleAuthResult :
-    Config flags auth model msg
+    (auth -> Config flags model msg)
     -> flags
     -> Location
     -> Result ( authModel, Cmd authMsg ) auth
-    -> ( Model flags authModel model, Cmd (Msg authMsg msg) )
-handleAuthResult config flags location result =
+    -> ( Model flags authModel model msg, Cmd (Msg authMsg msg) )
+handleAuthResult ready flags location result =
     case result of
         Err ( authModel, authCmd ) ->
             ( Unauthed flags location authModel
@@ -79,18 +79,25 @@ handleAuthResult config flags location result =
             )
 
         Ok auth ->
-            config.init flags auth location
-                |> Tuple.mapFirst Authed
-                |> Tuple.mapSecond (Cmd.map MainMsg)
+            let
+                config =
+                    ready auth
+
+                ( mainModel, cmd ) =
+                    config.init flags location
+            in
+            ( Authed config mainModel
+            , Cmd.map MainMsg cmd
+            )
 
 
 update :
     AuthProgram flags auth authModel authMsg
-    -> Config flags auth model msg
+    -> (auth -> Config flags model msg)
     -> Msg authMsg msg
-    -> Model flags authModel model
-    -> ( Model flags authModel model, Cmd (Msg authMsg msg) )
-update auth config msg model =
+    -> Model flags authModel model msg
+    -> ( Model flags authModel model msg, Cmd (Msg authMsg msg) )
+update auth ready msg model =
     case model of
         Unauthed flags location authModel ->
             case msg of
@@ -101,21 +108,21 @@ update auth config msg model =
 
                         Just onLocationChange ->
                             auth.update (onLocationChange newLocation) authModel
-                                |> handleAuthResult config flags newLocation
+                                |> handleAuthResult ready flags newLocation
 
                 AuthMsg authMsg ->
                     auth.update authMsg authModel
-                        |> handleAuthResult config flags location
+                        |> handleAuthResult ready flags location
 
                 MainMsg mainMsg ->
                     Debug.crash "ProgramWithAuth.update: got a MainMsg before auth finished. (This should not be possible.)" ( msg, model )
 
-        Authed mainModel ->
+        Authed config mainModel ->
             case msg of
                 LocationChange location ->
                     config.onLocationChange
                         |> Maybe.map (\f -> f location)
-                        |> Maybe.map (\m -> update auth config (MainMsg m) model)
+                        |> Maybe.map (\m -> update auth ready (MainMsg m) model)
                         |> Maybe.withDefault ( model, Cmd.none )
 
                 AuthMsg authMsg ->
@@ -124,27 +131,27 @@ update auth config msg model =
 
                 MainMsg mainMsg ->
                     config.update mainMsg mainModel
-                        |> Tuple.mapFirst Authed
+                        |> Tuple.mapFirst (Authed config)
                         |> Tuple.mapSecond (Cmd.map MainMsg)
 
 
-subscriptions auth config model =
+subscriptions auth model =
     case model of
         Unauthed _ _ authModel ->
             auth.subscriptions authModel
                 |> Sub.map AuthMsg
 
-        Authed mainModel ->
+        Authed config mainModel ->
             config.subscriptions mainModel
                 |> Sub.map MainMsg
 
 
-view auth config model =
+view auth model =
     case model of
         Unauthed _ _ authModel ->
             auth.view authModel
                 |> Html.map AuthMsg
 
-        Authed mainModel ->
+        Authed config mainModel ->
             config.view mainModel
                 |> Html.map MainMsg
