@@ -11,18 +11,17 @@ import Navigation exposing (Location)
 
 -}
 type alias AuthProgram flags auth model msg =
-    { onLocationChange : Maybe (Location -> msg)
-    , init : flags -> Location -> Result ( model, Cmd msg ) auth
-    , update : msg -> model -> Result ( model, Cmd msg ) auth
-    , subscriptions : model -> Sub msg
-    , view : model -> Html msg
-    }
+    ProgramRecord flags auth model msg
 
 
 type alias Config flags model msg =
+    ProgramRecord flags Never model msg
+
+
+type alias ProgramRecord flags done model msg =
     { onLocationChange : Maybe (Location -> msg)
-    , init : flags -> Location -> ( model, Cmd msg )
-    , update : msg -> model -> ( model, Cmd msg )
+    , init : flags -> Location -> Result ( model, Cmd msg ) done
+    , update : msg -> model -> Result ( model, Cmd msg ) done
     , subscriptions : model -> Sub msg
     , view : model -> Html msg
     }
@@ -85,10 +84,21 @@ handleAuthResult ready flags location result =
 
                 ( mainModel, cmd ) =
                     config.init flags location
+                        |> handleNever
             in
             ( Authed config mainModel
             , Cmd.map MainMsg cmd
             )
+
+
+handleNever : Result a Never -> a
+handleNever r =
+    case r of
+        Ok a ->
+            never a
+
+        Err x ->
+            x
 
 
 update :
@@ -131,6 +141,7 @@ update auth ready msg model =
 
                 MainMsg mainMsg ->
                     config.update mainMsg mainModel
+                        |> handleNever
                         |> Tuple.mapFirst (Authed config)
                         |> Tuple.mapSecond (Cmd.map MainMsg)
 
