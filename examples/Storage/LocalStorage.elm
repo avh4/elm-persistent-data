@@ -6,12 +6,12 @@ module Storage.LocalStorage exposing (storage)
 
 -}
 
-import PersistentCache
-import Task
-import Storage exposing (Storage)
-import Storage.Hash as Hash
 import Json.Decode
 import Json.Encode
+import PersistentCache
+import Storage exposing (Storage)
+import Storage.Hash as Hash
+import Task
 
 
 cache : PersistentCache.Cache String
@@ -41,13 +41,14 @@ storage =
         { read =
             \hash ->
                 PersistentCache.get cache (Hash.toString hash)
+                    |> Task.andThen (Maybe.map Task.succeed >> Maybe.withDefault (Task.fail "Not found"))
         , write =
             \content ->
                 let
                     hash =
                         Hash.ofString content
                 in
-                    PersistentCache.add cache (Hash.toString hash) content
-                        |> Task.map (always hash)
+                PersistentCache.add cache (Hash.toString hash) content
+                    |> Task.map (always hash)
         }
     }

@@ -57,14 +57,14 @@ all =
                 start
                     |> resolve mocks.readData Nothing
                     |> resolve (mocks.readRef appId) (Just <| Hash.toString <| hash batch1)
-                    |> resolve (mocks.readContent <| hash batch1) (Just batch1)
+                    |> resolve (mocks.readContent <| hash batch1) batch1
                     |> expectMockTask (mocks.writeData finalData)
         ]
 
 
 type alias Mocks =
     { readRef : String -> MockTask String (Maybe String)
-    , readContent : Hash -> MockTask String (Maybe String)
+    , readContent : Hash -> MockTask String String
     , writeContent : String -> MockTask String Hash
     , writeRef : String -> Maybe String -> String -> MockTask String ()
     , readData : MockTask Never (Maybe String)
@@ -106,8 +106,7 @@ start =
             }
         , content =
             { read = mocks.readContent >> TestContext.toTask
-            , write =
-                mocks.writeContent >> TestContext.toTask
+            , write = mocks.writeContent >> TestContext.toTask
             }
         }
         (Just

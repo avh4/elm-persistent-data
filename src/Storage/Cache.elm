@@ -20,26 +20,16 @@ contentStore fast slow =
         fastRead hash =
             fast.read hash
                 |> Task.mapError (always ())
-                |> Task.andThen
-                    (Maybe.map Task.succeed
-                        >> Maybe.withDefault (Task.fail ())
-                    )
 
-        fastWrite : Maybe String -> Task Never ()
+        fastWrite : String -> Task Never ()
         fastWrite content =
-            case content of
-                Nothing ->
-                    Task.succeed ()
-
-                Just value ->
-                    fast.write value
-                        |> Process.spawn
-                        |> Task.map (always ())
+            fast.write content
+                |> Process.spawn
+                |> Task.map (always ())
     in
     { read =
         \hash ->
             fastRead hash
-                |> Task.map Just
                 |> Task.onError (\() -> slow.read hash)
                 |> passThrough fastWrite
     , write = \value -> slow.write value

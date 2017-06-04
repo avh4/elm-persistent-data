@@ -56,7 +56,7 @@ storage auth =
                 Dropbox.download auth
                     { path = "/content/" ++ Hash.toString hash
                     }
-                    |> Task.map (.content >> Just)
+                    |> Task.map .content
                     |> Task.mapError toString
         , write =
             \content ->

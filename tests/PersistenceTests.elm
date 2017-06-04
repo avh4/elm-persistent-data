@@ -10,7 +10,7 @@ import TestContextWithMocks as TestContext exposing (MockTask, TestContext)
 
 type alias Mocks =
     { readRef : String -> MockTask String (Maybe String)
-    , readContent : Hash -> MockTask String (Maybe String)
+    , readContent : Hash -> MockTask String String
     , writeContent : String -> MockTask String Hash
     , writeRef : String -> Maybe String -> String -> MockTask String ()
     }
@@ -143,7 +143,7 @@ all =
                     in
                     start
                         |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch)
-                        |> resolve (mocks.readContent (hash batch)) (Just batch)
+                        |> resolve (mocks.readContent (hash batch)) batch
                         |> expectCurrent
                             (Persistence.Ready
                                 { list = [ "hello" ] }
@@ -157,7 +157,7 @@ all =
                     in
                     start
                         |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch)
-                        |> resolve (mocks.readContent (hash batch)) (Just batch)
+                        |> resolve (mocks.readContent (hash batch)) batch
                         |> expectCurrent
                             (Persistence.Ready
                                 { list = [ "world", "hello" ] }
@@ -187,9 +187,9 @@ all =
                     in
                     start
                         |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch2)
-                        |> resolve (mocks.readContent (hash batch2)) (Just batch2)
-                        |> resolve (mocks.readContent (hash batch1)) (Just batch1)
-                        |> resolve (mocks.readContent (hash batch2)) (Just batch2)
+                        |> resolve (mocks.readContent (hash batch2)) batch2
+                        |> resolve (mocks.readContent (hash batch1)) batch1
+                        |> resolve (mocks.readContent (hash batch2)) batch2
                         |> expectCurrent
                             (Persistence.Ready
                                 { list = [ "world", "hello" ] }
@@ -258,7 +258,7 @@ all =
                     in
                     start
                         |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch1)
-                        |> resolve (mocks.readContent (hash batch1)) (Just batch1)
+                        |> resolve (mocks.readContent (hash batch1)) batch1
                         |> updateUi (TestApp.Typed "world")
                         |> updateUi TestApp.Add
                         |> resolve (mocks.writeContent batch2) (hash batch2)
@@ -278,7 +278,7 @@ all =
                     in
                     start
                         |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch1)
-                        |> resolve (mocks.readContent (hash batch1)) (Just batch1)
+                        |> resolve (mocks.readContent (hash batch1)) batch1
                         |> updateUi (TestApp.Typed "buy carrots")
                         |> updateUi TestApp.Add
                         |> resolve (mocks.writeContent batch2) (hash batch2)

@@ -70,22 +70,9 @@ storage rootUrl =
     , content =
         { read =
             \hash ->
-                let
-                    onError error =
-                        case error of
-                            Http.BadStatus response ->
-                                if response.status.code == 404 then
-                                    Task.succeed Nothing
-                                else
-                                    Task.fail (toString error)
-
-                            _ ->
-                                Task.fail (toString error)
-                in
                 Http.getString (root ++ "/content/" ++ Hash.toString hash)
                     |> Http.toTask
-                    |> Task.map Just
-                    |> Task.onError onError
+                    |> Task.mapError toString
         , write =
             \content ->
                 let

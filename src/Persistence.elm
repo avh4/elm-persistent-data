@@ -166,8 +166,8 @@ current (Model model) =
 type Msg event msg
     = UiMsg msg
     | ReadRoot (Result String (Maybe Hash))
-    | ReadHistory Hash (List Hash) (Result String (Maybe String))
-    | ReadBatch (List Hash) (Result String (Maybe String))
+    | ReadHistory Hash (List Hash) (Result String String)
+    | ReadBatch (List Hash) (Result String String)
     | WriteBatch (Result String Hash)
     | WriteRoot Hash (Result String ())
     | ReadCache (Maybe String)
@@ -288,13 +288,13 @@ update config msg (Model model) =
                 |> Task.attempt ReadRoot
             )
 
-        ReadHistory id whenDone (Ok (Just batchJson)) ->
+        ReadHistory id whenDone (Ok batchJson) ->
             case Json.Decode.decodeString (Batch.decoder config.data.decoder) batchJson of
                 Ok batch ->
                     case batch.parent of
                         Nothing ->
                             update config
-                                (ReadBatch whenDone (Ok <| Just batchJson))
+                                (ReadBatch whenDone (Ok batchJson))
                                 (Model model)
 
                         Just parent ->
@@ -310,14 +310,6 @@ update config msg (Model model) =
                     , Cmd.none
                     )
 
-        ReadHistory id _ (Ok Nothing) ->
-            ( Model
-                { model
-                    | errors = ("Fatal error: a known batch of events is missing from the storage backend: " ++ toString id) :: model.errors
-                }
-            , Cmd.none
-            )
-
         ReadHistory id _ (Err message) ->
             ( Model
                 { model
@@ -326,7 +318,7 @@ update config msg (Model model) =
             , Cmd.none
             )
 
-        ReadBatch rest (Ok (Just batchJson)) ->
+        ReadBatch rest (Ok batchJson) ->
             case Json.Decode.decodeString (Batch.decoder config.data.decoder) batchJson of
                 Ok batch ->
                     let
@@ -365,14 +357,6 @@ update config msg (Model model) =
                         }
                     , Cmd.none
                     )
-
-        ReadBatch _ (Ok Nothing) ->
-            ( Model
-                { model
-                    | errors = "Fatal error: a known batch of events is missing from the storage backend" :: model.errors
-                }
-            , Cmd.none
-            )
 
         ReadBatch _ (Err message) ->
             ( Model

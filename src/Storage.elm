@@ -44,9 +44,7 @@ type alias RefStore =
 The key of any value is the SHA-256 hash of the value.
 -}
 type alias ContentStore =
-    { read :
-        Hash
-        -> Task String (Maybe String) -- TODO: should just be Task String String? (not existing is a failure, right?)
+    { read : Hash -> Task String String
     , write : String -> Task String Hash
     }
 

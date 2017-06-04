@@ -10,7 +10,7 @@ import Test exposing (..)
 import TestContextWithMocks as TestContext exposing (MockTask, TestContext, mockTask, resolveMockTask)
 
 
-fastRead : Hash -> MockTask String (Maybe String)
+fastRead : Hash -> MockTask String String
 fastRead hash =
     mockTask ("fast.read " ++ Hash.toString hash)
 
@@ -20,7 +20,7 @@ fastWrite value =
     mockTask ("fast.write " ++ value)
 
 
-slowRead : Hash -> MockTask String (Maybe String)
+slowRead : Hash -> MockTask String String
 slowRead hash =
     mockTask ("slow.read " ++ Hash.toString hash)
 
@@ -72,40 +72,40 @@ all =
         [ describe "read"
             [ testTask "when the fast store has the value"
                 (cache.read (Hash.ofString "ABC"))
-                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok <| Just "ABC") ]
-                (Ok <| Just "ABC")
+                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok "ABC") ]
+                (Ok "ABC")
             , testTask "when only the slow store has the value"
                 (cache.read (Hash.ofString "ABC"))
-                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok <| Nothing)
-                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
+                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Err "Doesn't exist")
+                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok "ABC")
                 ]
-                (Ok <| Just "ABC")
+                (Ok "ABC")
             , test "when slow store succeeds, writes to fast store" <|
                 \() ->
                     testResults (start <| cache.read (Hash.ofString "ABC"))
-                        [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok <| Nothing)
-                        , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
+                        [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Err "Doesn't exist")
+                        , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok "ABC")
                         ]
                         (TestContext.expectMockTask (fastWrite "ABC"))
             , testTask "when slow store fails, fails"
                 (cache.read (Hash.ofString "ABC"))
-                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok Nothing)
+                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Err "Doesn't exist")
                 , resolveMockTask (slowRead (Hash.ofString "ABC")) (Err "X")
                 ]
                 (Err "X")
             , testTask "when fast store fails, ignores the failure"
                 (cache.read (Hash.ofString "ABC"))
                 [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Err "X")
-                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
+                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok "ABC")
                 ]
-                (Ok <| Just "ABC")
+                (Ok "ABC")
             , testTask "when write to fast store fails, ignores the failure"
                 (cache.read (Hash.ofString "ABC"))
-                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Ok Nothing)
-                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok <| Just "ABC")
+                [ resolveMockTask (fastRead (Hash.ofString "ABC")) (Err "Doesn't exist")
+                , resolveMockTask (slowRead (Hash.ofString "ABC")) (Ok "ABC")
                 , resolveMockTask (fastWrite "ABC") (Err "X")
                 ]
-                (Ok <| Just "ABC")
+                (Ok "ABC")
             ]
         , describe "write"
             [ testTask "when slow store succeeds, succeeds"
