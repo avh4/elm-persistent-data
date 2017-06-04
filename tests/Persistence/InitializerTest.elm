@@ -83,4 +83,19 @@ all =
                         |> resolveBatch 1 (Ok "(AB)")
                         |> done (Just 2) "(AB)CD"
             ]
+        , test "when initialRoot is cached" <|
+            \() ->
+                init
+                    { cachedData = Just { root = 1, data = "<AB>" }
+                    , latestRoot = Just 1
+                    }
+                    |> done (Just 1) "<AB>"
+        , test "when previous data is cached" <|
+            \() ->
+                init
+                    { cachedData = Just { root = 1, data = "<AB>" }
+                    , latestRoot = Just 2
+                    }
+                    |> resolveBatch 2 (Err ( [ "C", "D" ], Just 1 ))
+                    |> done (Just 2) "<AB>CD"
         ]

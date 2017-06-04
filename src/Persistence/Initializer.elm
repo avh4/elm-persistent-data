@@ -14,21 +14,39 @@ init :
     }
     -> Next id data msg
 init config =
-    handleParent config.fold config.latestRoot config.latestRoot config.emptyData []
+    handleParent config config.latestRoot []
 
 
-handleParent fold rootId next data allMsgs =
+handleParent config next allMsgs =
+    let
+        done d =
+            Done config.latestRoot
+                -- TODO: optimize by not using List.concat
+                (List.foldl config.fold d (List.concat allMsgs))
+    in
     case next of
         Nothing ->
-            Done rootId (List.foldl fold data (List.concat allMsgs))
+            done config.emptyData
 
         Just parentId ->
-            FetchBatch parentId
-                (\batch ->
-                    case batch of
-                        Ok data ->
-                            Done rootId (List.foldl fold data (List.concat allMsgs))
+            let
+                fetchNext =
+                    FetchBatch parentId
+                        (\batch ->
+                            case batch of
+                                Ok data ->
+                                    done data
 
-                        Err ( msgs, grandparent ) ->
-                            handleParent fold rootId grandparent data (msgs :: allMsgs)
-                )
+                                Err ( msgs, grandparent ) ->
+                                    handleParent config grandparent (msgs :: allMsgs)
+                        )
+            in
+            case config.cachedData of
+                Nothing ->
+                    fetchNext
+
+                Just cached ->
+                    if cached.root == parentId then
+                        done cached.data
+                    else
+                        fetchNext
