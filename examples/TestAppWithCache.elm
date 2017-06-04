@@ -3,8 +3,10 @@ module TestAppWithCache exposing (main)
 import BeautifulExample
 import ChooseStorage
 import Color
+import PersistentCache
 import ProgramRecord
 import ProgramWithAuth
+import Task
 import TestApp
 
 
@@ -26,5 +28,22 @@ main =
         )
         <|
             ProgramWithAuth.authProgram
+                { read =
+                    PersistentCache.get cache "auth"
+                        |> Task.andThen (Maybe.map Task.succeed >> Maybe.withDefault (Task.fail ()))
+                , write =
+                    PersistentCache.add cache "auth"
+                        >> Task.map (always ())
+                }
                 ChooseStorage.programRecord
-                (\( storage, dataCache ) -> TestApp.programRecord storage dataCache)
+                (ChooseStorage.create >> uncurry TestApp.programRecord)
+
+
+cache =
+    PersistentCache.cache
+        { name = "TestAppWithCache"
+        , version = 1
+        , kilobytes = 2000
+        , decode = ChooseStorage.decoder
+        , encode = ChooseStorage.encoder
+        }
