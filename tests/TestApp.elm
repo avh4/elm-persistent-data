@@ -1,4 +1,4 @@
-module TestApp exposing (Data, Event, Msg(..), UiState, program)
+module TestApp exposing (Data, Event, Msg(..), UiState, program, programRecord)
 
 import Html exposing (Html)
 import Html.Attributes
@@ -6,6 +6,7 @@ import Html.Events
 import Json.Decode
 import Json.Encode
 import Persistence
+import ProgramWithAuth
 import Storage exposing (Storage)
 import Storage.Debug
 import Storage.ExampleServer
@@ -102,7 +103,8 @@ updateUi data msg state =
 view : Data -> UiState -> Html Msg
 view data state =
     Html.div []
-        [ Html.ul []
+        [ Html.h3 [] [ Html.text "Persistent TODO list" ]
+        , Html.ul []
             (List.map (\i -> Html.li [] [ Html.text i ]) data.list)
         , Html.hr [] []
         , Html.form [ Html.Events.onSubmit Add ]
@@ -116,9 +118,9 @@ view data state =
         ]
 
 
-program : Storage -> Maybe Storage.CacheStore -> Persistence.Program Never Data Event UiState Msg
-program storage cacheStore =
-    Persistence.program
+programRecord : Storage -> Maybe Storage.CacheStore -> Persistence.ProgramRecord Never Data Event UiState Msg
+programRecord storage cacheStore =
+    Persistence.programRecord
         { data =
             { init = { list = [] }
             , update = update
@@ -150,6 +152,12 @@ program storage cacheStore =
                         }
                     )
         }
+
+
+program : Storage -> Maybe Storage.CacheStore -> Persistence.Program Never Data Event UiState Msg
+program storage cacheStore =
+    programRecord storage cacheStore
+        |> ProgramWithAuth.toProgram
 
 
 main : Persistence.Program Never Data Event UiState Msg

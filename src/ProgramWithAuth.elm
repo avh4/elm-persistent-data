@@ -1,4 +1,16 @@
-module ProgramWithAuth exposing (AuthProgram, Config, Model, Msg, program)
+module ProgramWithAuth
+    exposing
+        ( AuthProgram
+        , Config
+        , Model
+        , Msg
+        , ProgramRecord
+        , ProgramType(..)
+        , authProgram
+        , htmlProgram
+        , navigationProgram
+        , toProgram
+        )
 
 import Html exposing (Html)
 import Navigation exposing (Location)
@@ -10,6 +22,112 @@ import Navigation exposing (Location)
   - `Err` means auth did not finish; the provided value is the new model and Cmd for the auth program
 
 -}
+type alias ProgramRecord flags done model msg =
+    { init : ProgramType flags (Result ( model, Cmd msg ) done) msg
+    , update : msg -> model -> Result ( model, Cmd msg ) done
+    , subscriptions : model -> Sub msg
+    , view : model -> Html msg
+    }
+
+
+type ProgramType flags init msg
+    = NoArgs init
+    | WithFlags (flags -> init)
+    | WithLocation (Location -> init) (Location -> msg)
+    | WithBoth (flags -> Location -> init) (Location -> msg)
+
+
+applyInitWithFlags : ProgramType flags init msg -> flags -> Location -> init
+applyInitWithFlags init flags location =
+    case init of
+        NoArgs value ->
+            value
+
+        WithFlags f ->
+            f flags
+
+        WithLocation f _ ->
+            f location
+
+        WithBoth f _ ->
+            f flags location
+
+
+applyInit : ProgramType Never init msg -> Location -> init
+applyInit init location =
+    case init of
+        NoArgs value ->
+            value
+
+        WithFlags f ->
+            Debug.crash "WithFlags when flags=Never" init
+
+        WithLocation f _ ->
+            f location
+
+        WithBoth f _ ->
+            Debug.crash "WithBoth when flags=Never" init
+
+
+getLocationChange : ProgramType flags init msg -> Maybe (Location -> msg)
+getLocationChange init =
+    case init of
+        NoArgs _ ->
+            Nothing
+
+        WithFlags _ ->
+            Nothing
+
+        WithLocation _ f ->
+            Just f
+
+        WithBoth _ f ->
+            Just f
+
+
+toProgram : ProgramRecord Never Never model msg -> Platform.Program Never model msg
+toProgram record =
+    case record.init of
+        NoArgs value ->
+            Html.program
+                { init = value |> handleNever
+                , update = record.update >>> handleNever
+                , subscriptions = record.subscriptions
+                , view = record.view
+                }
+
+        WithFlags init ->
+            Html.programWithFlags
+                { init = init >> handleNever
+                , update = record.update >>> handleNever
+                , subscriptions = record.subscriptions
+                , view = record.view
+                }
+
+        WithLocation init onLocationChange ->
+            Navigation.program
+                onLocationChange
+                { init = init >> handleNever
+                , update = record.update >>> handleNever
+                , subscriptions = record.subscriptions
+                , view = record.view
+                }
+
+        WithBoth init onLocationChange ->
+            Navigation.programWithFlags
+                onLocationChange
+                { init = init >>> handleNever
+                , update = record.update >>> handleNever
+                , subscriptions = record.subscriptions
+                , view = record.view
+                }
+
+
+(>>>) : (a -> b -> y) -> (y -> z) -> (a -> b -> z)
+(>>>) y f a b =
+    f (y a b)
+
+
 type alias AuthProgram flags auth model msg =
     ProgramRecord flags auth model msg
 
@@ -18,17 +136,8 @@ type alias Config flags model msg =
     ProgramRecord flags Never model msg
 
 
-type alias ProgramRecord flags done model msg =
-    { onLocationChange : Maybe (Location -> msg)
-    , init : flags -> Location -> Result ( model, Cmd msg ) done
-    , update : msg -> model -> Result ( model, Cmd msg ) done
-    , subscriptions : model -> Sub msg
-    , view : model -> Html msg
-    }
-
-
 type Model flags authModel model msg
-    = Unauthed flags Location authModel
+    = Unauthed Location authModel
     | Authed (Config flags model msg) model
 
 
@@ -38,12 +147,44 @@ type Msg authMsg msg
     | MainMsg msg
 
 
-program :
-    AuthProgram flags auth authModel authMsg
-    -> (auth -> Config flags model msg)
-    -> Program flags (Model flags authModel model msg) (Msg authMsg msg)
-program auth ready =
-    Navigation.programWithFlags
+htmlProgram :
+    { init : ( model, Cmd msg )
+    , update : msg -> model -> ( model, Cmd msg )
+    , subscriptions : model -> Sub msg
+    , view : model -> Html msg
+    }
+    -> ProgramRecord Never Never model msg
+htmlProgram config =
+    { init = NoArgs (Err config.init)
+    , update = config.update >>> Err
+    , subscriptions = config.subscriptions
+    , view = config.view
+    }
+
+
+navigationProgram :
+    (Location -> msg)
+    ->
+        { init : Location -> ( model, Cmd msg )
+        , update : msg -> model -> ( model, Cmd msg )
+        , view : model -> Html msg
+        , subscriptions : model -> Sub msg
+        }
+    -> ProgramRecord Never Never model msg
+navigationProgram onLocationChange config =
+    { init = WithLocation (config.init >> Err) onLocationChange
+    , update = config.update >>> Err
+    , subscriptions = config.subscriptions
+    , view = config.view
+    }
+
+
+authProgram :
+    AuthProgram Never auth authModel authMsg
+    -> (auth -> Config Never model msg)
+    -> ProgramRecord Never Never (Model Never authModel model msg) (Msg authMsg msg)
+authProgram auth ready =
+    navigationProgram
         LocationChange
         { init = init auth ready
         , update = update auth ready
@@ -52,27 +193,42 @@ program auth ready =
         }
 
 
+navigationProgramWithFlags :
+    (Location -> msg)
+    ->
+        { init : flags -> Location -> ( model, Cmd msg )
+        , update : msg -> model -> ( model, Cmd msg )
+        , view : model -> Html msg
+        , subscriptions : model -> Sub msg
+        }
+    -> ProgramRecord flags Never model msg
+navigationProgramWithFlags onLocationChange config =
+    { init = WithBoth (config.init >>> Err) onLocationChange
+    , update = config.update >>> Err
+    , subscriptions = config.subscriptions
+    , view = config.view
+    }
+
+
 init :
-    AuthProgram flags auth authModel authMsg
-    -> (auth -> Config flags model msg)
-    -> flags
+    AuthProgram Never auth authModel authMsg
+    -> (auth -> Config Never model msg)
     -> Location
-    -> ( Model flags authModel model msg, Cmd (Msg authMsg msg) )
-init auth ready flags location =
-    auth.init flags location
-        |> handleAuthResult ready flags location
+    -> ( Model Never authModel model msg, Cmd (Msg authMsg msg) )
+init auth ready location =
+    applyInit auth.init location
+        |> handleAuthResult ready location
 
 
 handleAuthResult :
-    (auth -> Config flags model msg)
-    -> flags
+    (auth -> Config Never model msg)
     -> Location
     -> Result ( authModel, Cmd authMsg ) auth
-    -> ( Model flags authModel model msg, Cmd (Msg authMsg msg) )
-handleAuthResult ready flags location result =
+    -> ( Model Never authModel model msg, Cmd (Msg authMsg msg) )
+handleAuthResult ready location result =
     case result of
         Err ( authModel, authCmd ) ->
-            ( Unauthed flags location authModel
+            ( Unauthed location authModel
             , authCmd
                 |> Cmd.map AuthMsg
             )
@@ -83,7 +239,7 @@ handleAuthResult ready flags location result =
                     ready auth
 
                 ( mainModel, cmd ) =
-                    config.init flags location
+                    applyInit config.init location
                         |> handleNever
             in
             ( Authed config mainModel
@@ -102,27 +258,27 @@ handleNever r =
 
 
 update :
-    AuthProgram flags auth authModel authMsg
-    -> (auth -> Config flags model msg)
+    AuthProgram Never auth authModel authMsg
+    -> (auth -> Config Never model msg)
     -> Msg authMsg msg
-    -> Model flags authModel model msg
-    -> ( Model flags authModel model msg, Cmd (Msg authMsg msg) )
+    -> Model Never authModel model msg
+    -> ( Model Never authModel model msg, Cmd (Msg authMsg msg) )
 update auth ready msg model =
     case model of
-        Unauthed flags location authModel ->
+        Unauthed location authModel ->
             case msg of
                 LocationChange newLocation ->
-                    case auth.onLocationChange of
+                    case getLocationChange auth.init of
                         Nothing ->
                             ( model, Cmd.none )
 
                         Just onLocationChange ->
                             auth.update (onLocationChange newLocation) authModel
-                                |> handleAuthResult ready flags newLocation
+                                |> handleAuthResult ready newLocation
 
                 AuthMsg authMsg ->
                     auth.update authMsg authModel
-                        |> handleAuthResult ready flags location
+                        |> handleAuthResult ready location
 
                 MainMsg mainMsg ->
                     Debug.crash "ProgramWithAuth.update: got a MainMsg before auth finished. (This should not be possible.)" ( msg, model )
@@ -130,7 +286,7 @@ update auth ready msg model =
         Authed config mainModel ->
             case msg of
                 LocationChange location ->
-                    config.onLocationChange
+                    getLocationChange config.init
                         |> Maybe.map (\f -> f location)
                         |> Maybe.map (\m -> update auth ready (MainMsg m) model)
                         |> Maybe.withDefault ( model, Cmd.none )
@@ -148,7 +304,7 @@ update auth ready msg model =
 
 subscriptions auth model =
     case model of
-        Unauthed _ _ authModel ->
+        Unauthed _ authModel ->
             auth.subscriptions authModel
                 |> Sub.map AuthMsg
 
@@ -159,7 +315,7 @@ subscriptions auth model =
 
 view auth model =
     case model of
-        Unauthed _ _ authModel ->
+        Unauthed _ authModel ->
             auth.view authModel
                 |> Html.map AuthMsg
 

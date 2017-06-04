@@ -1,41 +1,32 @@
 module TestAppWithCache exposing (main)
 
-import TestApp
-import Storage.Debug
-import Storage.Cache
-import Storage.LocalStorage
-import Storage.ExampleServer
-import Persistence
-import PersistentCache
+import BeautifulExample
+import ChooseStorage
+import Color
 import Json.Decode
 import Json.Encode
+import PersistentCache
+import ProgramWithAuth
+import TestApp
 
 
-main : Persistence.Program Never TestApp.Data TestApp.Event TestApp.UiState TestApp.Msg
 main =
-    TestApp.program
-        (Storage.Cache.cache
-            (Storage.Debug.storage "local storage"
-                Storage.LocalStorage.storage
-            )
-            (Storage.Debug.storage "example-server (HTTP)" <|
-                Storage.ExampleServer.storage "/"
-            )
+    ProgramWithAuth.toProgram <|
+        (\r ->
+            { r
+                | view =
+                    BeautifulExample.view
+                        { title = "elm-persistent-data"
+                        , details = Nothing
+                        , maxWidth = 600
+                        , githubUrl = Just "https://github.com/avh4/elm-persistent-data"
+                        , documentationUrl = Nothing
+                        , color = Just Color.charcoal
+                        }
+                        << r.view
+            }
         )
-        (Just <|
-            Storage.Debug.cache "data cache"
-                { read = PersistentCache.get cache ".data"
-                , write = PersistentCache.add cache ".data"
-                }
-        )
-
-
-cache : PersistentCache.Cache String
-cache =
-    PersistentCache.cache
-        { name = "Storage.LocalStorage"
-        , version = 1
-        , kilobytes = 2000
-        , decode = Json.Decode.string
-        , encode = Json.Encode.string
-        }
+        <|
+            ProgramWithAuth.authProgram
+                ChooseStorage.programRecord
+                (\( storage, dataCache ) -> TestApp.programRecord storage dataCache)

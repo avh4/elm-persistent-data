@@ -12,6 +12,8 @@
     "exposed-modules": [],
     "native-modules": true,
     "dependencies": {
+        "avh4/elm-beautiful-example": "1.1.1 <= v < 2.0.0",
+        "avh4/elm-debug-controls": "1.0.1 <= v < 2.0.0",
         "avh4/elm-dropbox": "1.1.0 <= v < 2.0.0",
         "billstclair/elm-sha256": "1.0.5 <= v < 2.0.0",
         "elm-lang/core": "5.0.0 <= v < 6.0.0",

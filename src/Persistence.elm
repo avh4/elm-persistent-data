@@ -5,8 +5,10 @@ module Persistence
         , Msg
         , PersistenceState(..)
         , Program
+        , ProgramRecord
         , current
         , program
+        , programRecord
         , programWithNavigation
         , uimsg
         )
@@ -16,7 +18,7 @@ module Persistence
 
 ## Creating a persistent program
 
-@docs Config, Program, program, programWithNavigation
+@docs Config, Program, program, programWithNavigation, programRecord, ProgramRecord
 
 
 ## Stuff you shouldn't normally need
@@ -31,6 +33,7 @@ import Json.Encode
 import Navigation
 import Persistence.Batch as Batch
 import Process
+import ProgramWithAuth
 import Storage exposing (Storage)
 import Storage.Hash as Hash exposing (Hash)
 import Task exposing (Task)
@@ -74,6 +77,12 @@ type alias Config data event state msg =
 -}
 type alias Program flags data event state msg =
     Platform.Program flags (Model data state) (Msg event msg)
+
+
+{-| A `ProgramRecord` type alias for persistent programs.
+-}
+type alias ProgramRecord flags data event state msg =
+    ProgramWithAuth.ProgramRecord flags Never (Model data state) (Msg event msg)
 
 
 {-| The model for a persistence program.
@@ -460,7 +469,22 @@ program :
     Config data event state msg
     -> Program Never data event state msg
 program config =
-    Html.program
+    ProgramWithAuth.toProgram <|
+        programRecord config
+
+
+{-| Create the functions that are needed to create a persistent program.
+
+If possible, you should use [`program`](#program) instead.
+You may need to use this if you need more control over how and when the persistent program is started
+(such as if you need to do interactive authentication to create the `Storage` implementation.)
+
+-}
+programRecord :
+    Config data event state msg
+    -> ProgramRecord Never data event state msg
+programRecord config =
+    ProgramWithAuth.htmlProgram
         { init = init config
         , update = update config
         , subscriptions = subscriptions config
@@ -482,9 +506,10 @@ programAndThen next ( a, cmdA ) =
 programWithNavigation :
     (Navigation.Location -> msg)
     -> Config data event state msg
-    -> Program Never data event state msg
+    -> ProgramRecord Never data event state msg
 programWithNavigation locationToMessage config =
-    Navigation.program (locationToMessage >> UiMsg)
+    ProgramWithAuth.navigationProgram
+        (locationToMessage >> UiMsg)
         { init =
             \location ->
                 init config
