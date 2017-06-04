@@ -33,7 +33,7 @@ import Json.Encode
 import Navigation
 import Persistence.Batch as Batch
 import Process
-import ProgramWithAuth
+import ProgramRecord
 import Storage exposing (Storage)
 import Storage.Hash as Hash exposing (Hash)
 import Task exposing (Task)
@@ -82,7 +82,7 @@ type alias Program flags data event state msg =
 {-| A `ProgramRecord` type alias for persistent programs.
 -}
 type alias ProgramRecord flags data event state msg =
-    ProgramWithAuth.ProgramRecord flags Never (Model data state) (Msg event msg)
+    ProgramRecord.ProgramRecord flags Never (Model data state) (Msg event msg)
 
 
 {-| The model for a persistence program.
@@ -467,7 +467,7 @@ program :
     Config data event state msg
     -> Program Never data event state msg
 program config =
-    ProgramWithAuth.toProgram <|
+    ProgramRecord.toProgram <|
         programRecord config
 
 
@@ -482,7 +482,7 @@ programRecord :
     Config data event state msg
     -> ProgramRecord Never data event state msg
 programRecord config =
-    ProgramWithAuth.htmlProgram
+    ProgramRecord.htmlProgram
         { init = init config
         , update = update config
         , subscriptions = subscriptions config
@@ -506,7 +506,7 @@ programWithNavigation :
     -> Config data event state msg
     -> ProgramRecord Never data event state msg
 programWithNavigation locationToMessage config =
-    ProgramWithAuth.navigationProgram
+    ProgramRecord.navigationProgram
         (locationToMessage >> UiMsg)
         { init =
             \location ->

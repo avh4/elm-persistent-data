@@ -6,7 +6,7 @@ import Html.Events
 import Json.Decode
 import Json.Encode
 import Persistence
-import ProgramWithAuth
+import ProgramRecord
 import Storage exposing (Storage)
 import Storage.Debug
 import Storage.ExampleServer
@@ -157,7 +157,7 @@ programRecord storage cacheStore =
 program : Storage -> Maybe Storage.CacheStore -> Persistence.Program Never Data Event UiState Msg
 program storage cacheStore =
     programRecord storage cacheStore
-        |> ProgramWithAuth.toProgram
+        |> ProgramRecord.toProgram
 
 
 main : Persistence.Program Never Data Event UiState Msg

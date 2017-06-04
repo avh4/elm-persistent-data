@@ -3,15 +3,13 @@ module TestAppWithCache exposing (main)
 import BeautifulExample
 import ChooseStorage
 import Color
-import Json.Decode
-import Json.Encode
-import PersistentCache
+import ProgramRecord
 import ProgramWithAuth
 import TestApp
 
 
 main =
-    ProgramWithAuth.toProgram <|
+    ProgramRecord.toProgram <|
         (\r ->
             { r
                 | view =

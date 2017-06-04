@@ -4,123 +4,12 @@ module ProgramWithAuth
         , Config
         , Model
         , Msg
-        , ProgramRecord
-        , ProgramType(..)
         , authProgram
-        , htmlProgram
-        , navigationProgram
-        , toProgram
         )
 
 import Html exposing (Html)
 import Navigation exposing (Location)
-
-
-{-| `update` and `init` return a `Result` where:
-
-  - `Ok` means auth is finished; the provided value will be used to initialize the main program
-  - `Err` means auth did not finish; the provided value is the new model and Cmd for the auth program
-
--}
-type alias ProgramRecord flags done model msg =
-    { init : ProgramType flags (Result ( model, Cmd msg ) done) msg
-    , update : msg -> model -> Result ( model, Cmd msg ) done
-    , subscriptions : model -> Sub msg
-    , view : model -> Html msg
-    }
-
-
-type ProgramType flags init msg
-    = NoArgs init
-    | WithFlags (flags -> init)
-    | WithLocation (Location -> init) (Location -> msg)
-    | WithBoth (flags -> Location -> init) (Location -> msg)
-
-
-applyInitWithFlags : ProgramType flags init msg -> flags -> Location -> init
-applyInitWithFlags init flags location =
-    case init of
-        NoArgs value ->
-            value
-
-        WithFlags f ->
-            f flags
-
-        WithLocation f _ ->
-            f location
-
-        WithBoth f _ ->
-            f flags location
-
-
-applyInit : ProgramType Never init msg -> Location -> init
-applyInit init location =
-    case init of
-        NoArgs value ->
-            value
-
-        WithFlags f ->
-            Debug.crash "WithFlags when flags=Never" init
-
-        WithLocation f _ ->
-            f location
-
-        WithBoth f _ ->
-            Debug.crash "WithBoth when flags=Never" init
-
-
-getLocationChange : ProgramType flags init msg -> Maybe (Location -> msg)
-getLocationChange init =
-    case init of
-        NoArgs _ ->
-            Nothing
-
-        WithFlags _ ->
-            Nothing
-
-        WithLocation _ f ->
-            Just f
-
-        WithBoth _ f ->
-            Just f
-
-
-toProgram : ProgramRecord Never Never model msg -> Platform.Program Never model msg
-toProgram record =
-    case record.init of
-        NoArgs value ->
-            Html.program
-                { init = value |> handleNever
-                , update = record.update >>> handleNever
-                , subscriptions = record.subscriptions
-                , view = record.view
-                }
-
-        WithFlags init ->
-            Html.programWithFlags
-                { init = init >> handleNever
-                , update = record.update >>> handleNever
-                , subscriptions = record.subscriptions
-                , view = record.view
-                }
-
-        WithLocation init onLocationChange ->
-            Navigation.program
-                onLocationChange
-                { init = init >> handleNever
-                , update = record.update >>> handleNever
-                , subscriptions = record.subscriptions
-                , view = record.view
-                }
-
-        WithBoth init onLocationChange ->
-            Navigation.programWithFlags
-                onLocationChange
-                { init = init >>> handleNever
-                , update = record.update >>> handleNever
-                , subscriptions = record.subscriptions
-                , view = record.view
-                }
+import ProgramRecord exposing (ProgramRecord)
 
 
 (>>>) : (a -> b -> y) -> (y -> z) -> (a -> b -> z)
@@ -147,44 +36,12 @@ type Msg authMsg msg
     | MainMsg msg
 
 
-htmlProgram :
-    { init : ( model, Cmd msg )
-    , update : msg -> model -> ( model, Cmd msg )
-    , subscriptions : model -> Sub msg
-    , view : model -> Html msg
-    }
-    -> ProgramRecord Never Never model msg
-htmlProgram config =
-    { init = NoArgs (Err config.init)
-    , update = config.update >>> Err
-    , subscriptions = config.subscriptions
-    , view = config.view
-    }
-
-
-navigationProgram :
-    (Location -> msg)
-    ->
-        { init : Location -> ( model, Cmd msg )
-        , update : msg -> model -> ( model, Cmd msg )
-        , view : model -> Html msg
-        , subscriptions : model -> Sub msg
-        }
-    -> ProgramRecord Never Never model msg
-navigationProgram onLocationChange config =
-    { init = WithLocation (config.init >> Err) onLocationChange
-    , update = config.update >>> Err
-    , subscriptions = config.subscriptions
-    , view = config.view
-    }
-
-
 authProgram :
     AuthProgram Never auth authModel authMsg
     -> (auth -> Config Never model msg)
     -> ProgramRecord Never Never (Model Never authModel model msg) (Msg authMsg msg)
 authProgram auth ready =
-    navigationProgram
+    ProgramRecord.navigationProgram
         LocationChange
         { init = init auth ready
         , update = update auth ready
@@ -193,30 +50,13 @@ authProgram auth ready =
         }
 
 
-navigationProgramWithFlags :
-    (Location -> msg)
-    ->
-        { init : flags -> Location -> ( model, Cmd msg )
-        , update : msg -> model -> ( model, Cmd msg )
-        , view : model -> Html msg
-        , subscriptions : model -> Sub msg
-        }
-    -> ProgramRecord flags Never model msg
-navigationProgramWithFlags onLocationChange config =
-    { init = WithBoth (config.init >>> Err) onLocationChange
-    , update = config.update >>> Err
-    , subscriptions = config.subscriptions
-    , view = config.view
-    }
-
-
 init :
     AuthProgram Never auth authModel authMsg
     -> (auth -> Config Never model msg)
     -> Location
     -> ( Model Never authModel model msg, Cmd (Msg authMsg msg) )
 init auth ready location =
-    applyInit auth.init location
+    ProgramRecord.applyInit auth.init location
         |> handleAuthResult ready location
 
 
@@ -239,7 +79,7 @@ handleAuthResult ready location result =
                     ready auth
 
                 ( mainModel, cmd ) =
-                    applyInit config.init location
+                    ProgramRecord.applyInit config.init location
                         |> handleNever
             in
             ( Authed config mainModel
@@ -268,7 +108,7 @@ update auth ready msg model =
         Unauthed location authModel ->
             case msg of
                 LocationChange newLocation ->
-                    case getLocationChange auth.init of
+                    case ProgramRecord.getLocationChange auth.init of
                         Nothing ->
                             ( model, Cmd.none )
 
@@ -286,7 +126,7 @@ update auth ready msg model =
         Authed config mainModel ->
             case msg of
                 LocationChange location ->
-                    getLocationChange config.init
+                    ProgramRecord.getLocationChange config.init
                         |> Maybe.map (\f -> f location)
                         |> Maybe.map (\m -> update auth ready (MainMsg m) model)
                         |> Maybe.withDefault ( model, Cmd.none )
@@ -302,6 +142,10 @@ update auth ready msg model =
                         |> Tuple.mapSecond (Cmd.map MainMsg)
 
 
+subscriptions :
+    AuthProgram Never auth authModel authMsg
+    -> Model Never authModel model msg
+    -> Sub (Msg authMsg msg)
 subscriptions auth model =
     case model of
         Unauthed _ authModel ->
@@ -313,6 +157,10 @@ subscriptions auth model =
                 |> Sub.map MainMsg
 
 
+view :
+    AuthProgram Never auth authModel authMsg
+    -> Model Never authModel model msg
+    -> Html (Msg authMsg msg)
 view auth model =
     case model of
         Unauthed _ authModel ->

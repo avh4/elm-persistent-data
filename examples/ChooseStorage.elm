@@ -7,7 +7,7 @@ import Html.Events exposing (onClick)
 import Json.Decode
 import Json.Encode
 import PersistentCache
-import ProgramWithAuth
+import ProgramRecord exposing (ProgramRecord)
 import Storage exposing (Storage)
 import Storage.Cache
 import Storage.Debug
@@ -142,10 +142,11 @@ view model =
         ]
 
 
-programRecord : ProgramWithAuth.AuthProgram Never ( Storage, Maybe Storage.CacheStore ) Model Msg
+programRecord : ProgramRecord Never ( Storage, Maybe Storage.CacheStore ) Model Msg
 programRecord =
-    { init = ProgramWithAuth.NoArgs (Err ( initialModel, Cmd.none ))
-    , subscriptions = \_ -> Sub.none
-    , update = update
-    , view = view
-    }
+    ProgramRecord.completableProgram
+        { init = Err ( initialModel, Cmd.none )
+        , subscriptions = \_ -> Sub.none
+        , update = update
+        , view = view
+        }
