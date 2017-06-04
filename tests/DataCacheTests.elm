@@ -36,7 +36,7 @@ all =
             \() ->
                 start
                     |> resolve mocks.readData (Just """{"root":"sha256-d5509674058d858ed72c44396671a1c6ddab91730a7af44799ad1e893fa64005","data":{"list":["XYZZY"]}}""")
-                    |> resolve (mocks.readRef appId) (Just <| hash "__ROOT__")
+                    |> resolve (mocks.readRef appId) (Just <| Hash.toString <| hash "__ROOT__")
                     |> expectCurrent
                         (Persistence.Ready
                             { list = [ "XYZZY" ] }
@@ -56,17 +56,17 @@ all =
                 in
                 start
                     |> resolve mocks.readData Nothing
-                    |> resolve (mocks.readRef appId) (Just <| hash batch1)
+                    |> resolve (mocks.readRef appId) (Just <| Hash.toString <| hash batch1)
                     |> resolve (mocks.readContent <| hash batch1) (Just batch1)
                     |> expectMockTask (mocks.writeData finalData)
         ]
 
 
 type alias Mocks =
-    { readRef : String -> MockTask String (Maybe Hash)
+    { readRef : String -> MockTask String (Maybe String)
     , readContent : Hash -> MockTask String (Maybe String)
     , writeContent : String -> MockTask String Hash
-    , writeRef : String -> Maybe Hash -> Hash -> MockTask String ()
+    , writeRef : String -> Maybe String -> String -> MockTask String ()
     , readData : MockTask Never (Maybe String)
     , writeData : String -> MockTask Never ()
     }

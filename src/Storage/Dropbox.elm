@@ -24,15 +24,7 @@ storage auth =
                                 Task.fail (toString other)
 
                             Ok response ->
-                                parseHash response.content
-
-                    parseHash string =
-                        case Hash.fromString string of
-                            Ok hash ->
-                                Task.succeed (Just hash)
-
-                            Err message ->
-                                Task.fail message
+                                Task.succeed <| Just response.content
 
                     taskToResult task =
                         task
@@ -53,7 +45,7 @@ storage auth =
                     , autorename = False
                     , clientModified = Nothing
                     , mute = True
-                    , content = Hash.toString newValue
+                    , content = newValue
                     }
                     |> Task.map (always ())
                     |> Task.mapError toString

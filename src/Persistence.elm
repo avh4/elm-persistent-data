@@ -123,6 +123,18 @@ init config =
 readRootTask : Config data event state msg -> Task String (Maybe Hash)
 readRootTask config =
     config.storage.refs.read (config.appId ++ ".root-v1")
+        |> Task.andThen
+            (\r ->
+                case Maybe.map Hash.fromString r of
+                    Nothing ->
+                        Task.succeed Nothing
+
+                    Just (Err message) ->
+                        Task.fail message
+
+                    Just (Ok hash) ->
+                        Task.succeed (Just hash)
+            )
 
 
 readRoot : Config data event state msg -> Cmd (Msg event msg)
@@ -171,7 +183,9 @@ uimsg =
 
 writeRoot : Config data event state msg -> Maybe Hash -> Hash -> Task String ()
 writeRoot config previousRoot lastBatchId =
-    config.storage.refs.write (config.appId ++ ".root-v1") previousRoot lastBatchId
+    config.storage.refs.write (config.appId ++ ".root-v1")
+        (Maybe.map Hash.toString previousRoot)
+        (Hash.toString lastBatchId)
 
 
 readHistory : Config data event state msg -> Hash -> List Hash -> Cmd (Msg event msg)

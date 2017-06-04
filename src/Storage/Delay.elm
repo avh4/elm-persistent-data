@@ -23,7 +23,7 @@ storage delay impl =
 
 {-| Add delays to a `RefStore`
 -}
-refStore : Time -> RefStore a -> RefStore a
+refStore : Time -> RefStore -> RefStore
 refStore delay impl =
     { read =
         \key ->

@@ -9,10 +9,10 @@ import TestContextWithMocks as TestContext exposing (MockTask, TestContext)
 
 
 type alias Mocks =
-    { readRef : String -> MockTask String (Maybe Hash)
+    { readRef : String -> MockTask String (Maybe String)
     , readContent : Hash -> MockTask String (Maybe String)
     , writeContent : String -> MockTask String Hash
-    , writeRef : String -> Maybe Hash -> Hash -> MockTask String ()
+    , writeRef : String -> Maybe String -> String -> MockTask String ()
     }
 
 
@@ -142,7 +142,7 @@ all =
                             """{"events":[{"tag":"AddItem","$0":"hello"}],"parent":null}"""
                     in
                     start
-                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch)
+                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch)
                         |> resolve (mocks.readContent (hash batch)) (Just batch)
                         |> expectCurrent
                             (Persistence.Ready
@@ -156,7 +156,7 @@ all =
                             """{"events":[{"tag":"AddItem","$0":"hello"},{"tag":"AddItem","$0":"world"}],"parent":null}"""
                     in
                     start
-                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch)
+                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch)
                         |> resolve (mocks.readContent (hash batch)) (Just batch)
                         |> expectCurrent
                             (Persistence.Ready
@@ -186,7 +186,7 @@ all =
                             """{"events":[{"tag":"AddItem","$0":"world"}],"parent":""" ++ "\"" ++ Hash.toString (hash batch1) ++ """"}"""
                     in
                     start
-                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch2)
+                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch2)
                         |> resolve (mocks.readContent (hash batch2)) (Just batch2)
                         |> resolve (mocks.readContent (hash batch1)) (Just batch1)
                         |> resolve (mocks.readContent (hash batch2)) (Just batch2)
@@ -246,7 +246,7 @@ all =
                         |> updateUi TestApp.Add
                         |> resolve (mocks.writeContent batch) (hash batch)
                         |> expectMockTask
-                            (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" Nothing (hash batch))
+                            (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" Nothing (Hash.toString <| hash batch))
             , test "with a previous root, sets the parent" <|
                 \() ->
                     let
@@ -257,13 +257,13 @@ all =
                             """{"events":[{"tag":"AddItem","$0":"world"}],"parent":""" ++ "\"" ++ Hash.toString (hash batch1) ++ """"}"""
                     in
                     start
-                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch1)
+                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch1)
                         |> resolve (mocks.readContent (hash batch1)) (Just batch1)
                         |> updateUi (TestApp.Typed "world")
                         |> updateUi TestApp.Add
                         |> resolve (mocks.writeContent batch2) (hash batch2)
                         |> expectMockTask
-                            (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" (Just <| hash batch1) (hash batch2))
+                            (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" (Just <| Hash.toString <| hash batch1) (Hash.toString <| hash batch2))
             , test "with a previous root and update, sets the parent" <|
                 \() ->
                     let
@@ -277,17 +277,17 @@ all =
                             """{"events":[{"tag":"AddItem","$0":"check cookies"}],"parent":""" ++ "\"" ++ Hash.toString (hash batch2) ++ """"}"""
                     in
                     start
-                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| hash batch1)
+                        |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch1)
                         |> resolve (mocks.readContent (hash batch1)) (Just batch1)
                         |> updateUi (TestApp.Typed "buy carrots")
                         |> updateUi TestApp.Add
                         |> resolve (mocks.writeContent batch2) (hash batch2)
-                        |> resolve (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" (Just <| hash batch1) (hash batch2)) ()
+                        |> resolve (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" (Just <| Hash.toString <| hash batch1) (Hash.toString <| hash batch2)) ()
                         |> updateUi (TestApp.Typed "check cookies")
                         |> updateUi TestApp.Add
                         |> resolve (mocks.writeContent batch3) (hash batch3)
                         |> expectMockTask
-                            (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" (Just <| hash batch2) (hash batch3))
+                            (mocks.writeRef "io.github.avh4.elm-persistent-data.test-app.root-v1" (Just <| Hash.toString <| hash batch2) (Hash.toString <| hash batch3))
 
             -- TODO: a new event happens before writing finishes
             ]

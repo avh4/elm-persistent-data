@@ -26,7 +26,7 @@ import Task exposing (Task)
 
 -}
 type alias Storage =
-    { refs : RefStore Hash -- TODO: should just be RefStore String? maybe inline String?
+    { refs : RefStore
     , content : ContentStore
     }
 
@@ -34,9 +34,9 @@ type alias Storage =
 {-| A key-value store where the keys are Strings.
 To write a value for a key, you must correctly provide the current value.
 -}
-type alias RefStore value =
-    { read : String -> Task String (Maybe value)
-    , write : String -> Maybe value -> value -> Task String ()
+type alias RefStore =
+    { read : String -> Task String (Maybe String)
+    , write : String -> Maybe String -> String -> Task String ()
     }
 
 

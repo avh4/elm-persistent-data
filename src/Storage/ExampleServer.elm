@@ -37,23 +37,11 @@ storage rootUrl =
 
                             _ ->
                                 Task.fail (toString error)
-
-                    parseHash string =
-                        case Maybe.map Hash.fromString string of
-                            Just (Ok hash) ->
-                                Task.succeed (Just hash)
-
-                            Just (Err message) ->
-                                Task.fail message
-
-                            Nothing ->
-                                Task.succeed Nothing
                 in
                 Http.getString (root ++ "/refs/" ++ key)
                     |> Http.toTask
                     |> Task.map Just
                     |> Task.onError onError
-                    |> Task.andThen parseHash
         , write =
             \key oldValue newValue ->
                 Http.request
@@ -64,13 +52,13 @@ storage rootUrl =
                                 Http.header "x-if-empty" "true"
 
                             Just val ->
-                                Http.header "x-if-match" (Hash.toString val)
+                                Http.header "x-if-match" val
                         ]
                     , url = root ++ "/refs/" ++ key
                     , body =
                         Http.stringBody
                             "application/octet-stream"
-                            (Hash.toString newValue)
+                            newValue
                     , expect = Http.expectStringResponse (\_ -> Ok ())
                     , timeout = Nothing
                     , withCredentials = False

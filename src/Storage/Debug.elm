@@ -22,7 +22,7 @@ storage label impl =
 
 {-| Add debugging out to a `RefStore` implementation.
 -}
-refStore : String -> RefStore a -> RefStore a
+refStore : String -> RefStore -> RefStore
 refStore label impl =
     { read =
         \key ->
