@@ -98,4 +98,12 @@ all =
                     }
                     |> resolveBatch 2 (Err ( [ "C", "D" ], Just 1 ))
                     |> done (Just 2) "<AB>CD"
+        , test "when cached data is not an ancestor of initialRoot" <|
+            \() ->
+                init
+                    { cachedData = Just { root = 9, data = "<XYZ>" }
+                    , latestRoot = Just 1
+                    }
+                    |> resolveBatch 1 (Err ( [ "A", "B" ], Nothing ))
+                    |> done (Just 1) "AB"
         ]
