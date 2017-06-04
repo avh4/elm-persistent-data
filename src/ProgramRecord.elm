@@ -73,36 +73,26 @@ withFlags r =
     }
 
 
-applyInitWithFlags : ProgramType flags init msg -> flags -> Location -> init
-applyInitWithFlags init flags location =
-    case init of
-        NoArgs value ->
+applyInit : ProgramType flags init msg -> Maybe flags -> Location -> init
+applyInit init flags location =
+    case ( flags, init ) of
+        ( Nothing, NoArgs value ) ->
             value
 
-        WithFlags f ->
-            f flags
-
-        WithLocation f _ ->
+        ( Nothing, WithLocation f _ ) ->
             f location
 
-        WithBoth f _ ->
-            f flags location
+        ( Nothing, _ ) ->
+            Debug.crash "Program requires flags, but none were provided"
 
+        ( Just fl, WithFlags f ) ->
+            f fl
 
-applyInit : ProgramType Never init msg -> Location -> init
-applyInit init location =
-    case init of
-        NoArgs value ->
-            value
+        ( Just fl, WithBoth f _ ) ->
+            f fl location
 
-        WithFlags f ->
-            Debug.crash "WithFlags when flags=Never" init
-
-        WithLocation f _ ->
-            f location
-
-        WithBoth f _ ->
-            Debug.crash "WithBoth when flags=Never" init
+        ( Just _, _ ) ->
+            Debug.crash "Program has flags=Never, but flags were provided"
 
 
 getLocationChange : ProgramType flags init msg -> Maybe (Location -> msg)

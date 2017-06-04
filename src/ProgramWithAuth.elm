@@ -26,7 +26,7 @@ type alias Config flags model msg =
 
 
 type Model flags authModel model msg
-    = Unauthed Location authModel
+    = Unauthed (Maybe flags) Location authModel
     | Authed (Config flags model msg) model
 
 
@@ -43,7 +43,7 @@ authProgram :
 authProgram auth ready =
     ProgramRecord.navigationProgram
         LocationChange
-        { init = init auth ready
+        { init = init auth ready Nothing
         , update = update auth ready
         , subscriptions = subscriptions auth
         , view = view auth
@@ -51,24 +51,26 @@ authProgram auth ready =
 
 
 init :
-    AuthProgram Never auth authModel authMsg
-    -> (auth -> Config Never model msg)
+    AuthProgram flags auth authModel authMsg
+    -> (auth -> Config flags model msg)
+    -> Maybe flags
     -> Location
-    -> ( Model Never authModel model msg, Cmd (Msg authMsg msg) )
-init auth ready location =
-    ProgramRecord.applyInit auth.init location
-        |> handleAuthResult ready location
+    -> ( Model flags authModel model msg, Cmd (Msg authMsg msg) )
+init auth ready flags location =
+    ProgramRecord.applyInit auth.init flags location
+        |> handleAuthResult ready flags location
 
 
 handleAuthResult :
-    (auth -> Config Never model msg)
+    (auth -> Config flags model msg)
+    -> Maybe flags
     -> Location
     -> Result ( authModel, Cmd authMsg ) auth
-    -> ( Model Never authModel model msg, Cmd (Msg authMsg msg) )
-handleAuthResult ready location result =
+    -> ( Model flags authModel model msg, Cmd (Msg authMsg msg) )
+handleAuthResult ready flags location result =
     case result of
         Err ( authModel, authCmd ) ->
-            ( Unauthed location authModel
+            ( Unauthed flags location authModel
             , authCmd
                 |> Cmd.map AuthMsg
             )
@@ -79,7 +81,7 @@ handleAuthResult ready location result =
                     ready auth
 
                 ( mainModel, cmd ) =
-                    ProgramRecord.applyInit config.init location
+                    ProgramRecord.applyInit config.init flags location
                         |> handleNever
             in
             ( Authed config mainModel
@@ -98,14 +100,14 @@ handleNever r =
 
 
 update :
-    AuthProgram Never auth authModel authMsg
-    -> (auth -> Config Never model msg)
+    AuthProgram flags auth authModel authMsg
+    -> (auth -> Config flags model msg)
     -> Msg authMsg msg
-    -> Model Never authModel model msg
-    -> ( Model Never authModel model msg, Cmd (Msg authMsg msg) )
+    -> Model flags authModel model msg
+    -> ( Model flags authModel model msg, Cmd (Msg authMsg msg) )
 update auth ready msg model =
     case model of
-        Unauthed location authModel ->
+        Unauthed flags location authModel ->
             case msg of
                 LocationChange newLocation ->
                     case ProgramRecord.getLocationChange auth.init of
@@ -114,11 +116,11 @@ update auth ready msg model =
 
                         Just onLocationChange ->
                             auth.update (onLocationChange newLocation) authModel
-                                |> handleAuthResult ready newLocation
+                                |> handleAuthResult ready flags newLocation
 
                 AuthMsg authMsg ->
                     auth.update authMsg authModel
-                        |> handleAuthResult ready location
+                        |> handleAuthResult ready flags location
 
                 MainMsg mainMsg ->
                     Debug.crash "ProgramWithAuth.update: got a MainMsg before auth finished. (This should not be possible.)" ( msg, model )
@@ -143,12 +145,12 @@ update auth ready msg model =
 
 
 subscriptions :
-    AuthProgram Never auth authModel authMsg
-    -> Model Never authModel model msg
+    AuthProgram flags auth authModel authMsg
+    -> Model flags authModel model msg
     -> Sub (Msg authMsg msg)
 subscriptions auth model =
     case model of
-        Unauthed _ authModel ->
+        Unauthed _ _ authModel ->
             auth.subscriptions authModel
                 |> Sub.map AuthMsg
 
@@ -158,12 +160,12 @@ subscriptions auth model =
 
 
 view :
-    AuthProgram Never auth authModel authMsg
-    -> Model Never authModel model msg
+    AuthProgram flags auth authModel authMsg
+    -> Model flags authModel model msg
     -> Html (Msg authMsg msg)
 view auth model =
     case model of
-        Unauthed _ authModel ->
+        Unauthed _ _ authModel ->
             auth.view authModel
                 |> Html.map AuthMsg
 
