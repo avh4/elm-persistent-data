@@ -15,7 +15,7 @@ init config =
         |> Ok
 
 
-resolveBatch : id -> Result (List msg) data -> Result String (Initializer.Next id data msg) -> Result String (Initializer.Next id data msg)
+resolveBatch : id -> Result ( List msg, Maybe id ) data -> Result String (Initializer.Next id data msg) -> Result String (Initializer.Next id data msg)
 resolveBatch id result =
     let
         resolve prev =
@@ -56,13 +56,22 @@ all =
                         }
                         |> resolveBatch 1 (Ok "(A)")
                         |> done (Just 1) "(A)"
-            , test "when first batch is fetched" <|
+            , test "when a single batch is fetched" <|
                 \() ->
                     init
                         { cachedData = Nothing
                         , latestRoot = Just 1
                         }
-                        |> resolveBatch 1 (Err [ "A", "B" ])
+                        |> resolveBatch 1 (Err ( [ "A", "B" ], Nothing ))
                         |> done (Just 1) "AB"
+            , test "when multiple batches are fetched" <|
+                \() ->
+                    init
+                        { cachedData = Nothing
+                        , latestRoot = Just 2
+                        }
+                        |> resolveBatch 2 (Err ( [ "C", "D" ], Just 1 ))
+                        |> resolveBatch 1 (Err ( [ "A", "B" ], Nothing ))
+                        |> done (Just 2) "ABCD"
             ]
         ]
