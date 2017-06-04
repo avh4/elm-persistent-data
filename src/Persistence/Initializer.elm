@@ -20,14 +20,14 @@ init config =
 handleParent fold rootId next data allMsgs =
     case next of
         Nothing ->
-            Done rootId (List.foldr fold data (List.concat allMsgs))
+            Done rootId (List.foldl fold data (List.concat allMsgs))
 
         Just parentId ->
             FetchBatch parentId
                 (\batch ->
                     case batch of
                         Ok data ->
-                            Done (Just parentId) data
+                            Done rootId (List.foldl fold data (List.concat allMsgs))
 
                         Err ( msgs, grandparent ) ->
                             handleParent fold rootId grandparent data (msgs :: allMsgs)

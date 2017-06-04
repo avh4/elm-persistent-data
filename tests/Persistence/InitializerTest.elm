@@ -10,7 +10,7 @@ init config =
         { cachedData = config.cachedData
         , latestRoot = config.latestRoot
         , emptyData = ""
-        , fold = (++)
+        , fold = \m d -> d ++ m
         }
         |> Ok
 
@@ -73,5 +73,14 @@ all =
                         |> resolveBatch 2 (Err ( [ "C", "D" ], Just 1 ))
                         |> resolveBatch 1 (Err ( [ "A", "B" ], Nothing ))
                         |> done (Just 2) "ABCD"
+            , test "when a later batch is cached" <|
+                \() ->
+                    init
+                        { cachedData = Nothing
+                        , latestRoot = Just 2
+                        }
+                        |> resolveBatch 2 (Err ( [ "C", "D" ], Just 1 ))
+                        |> resolveBatch 1 (Ok "(AB)")
+                        |> done (Just 2) "(AB)CD"
             ]
         ]
