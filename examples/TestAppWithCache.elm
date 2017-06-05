@@ -43,7 +43,7 @@ cache =
     PersistentCache.cache
         { name = "TestAppWithCache"
         , version = 1
-        , kilobytes = 2000
+        , kilobytes = 10
         , decode = ChooseStorage.decoder
         , encode = ChooseStorage.encoder
         }
