@@ -4,5 +4,7 @@ set -ex
 
 elm-test --yes
 elm-make --yes
-cd examples
+
+pushd examples
 elm-make --yes --debug TestAppWithCache.elm --output ../example-server/index.html
+popd
