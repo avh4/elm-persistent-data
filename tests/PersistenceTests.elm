@@ -33,7 +33,7 @@ mocks =
     }
 
 
-start : TestContext (Persistence.Model TestApp.Data TestApp.UiState) (Persistence.Msg TestApp.Event TestApp.Msg)
+start : TestContext (Persistence.Model TestApp.Data TestApp.UiState) (Persistence.Msg TestApp.Data TestApp.Event TestApp.Msg)
 start =
     TestApp.program
         { refs =
@@ -69,8 +69,8 @@ resolve mock value =
 
 updateUi :
     msg
-    -> TestContext model (Persistence.Msg event msg)
-    -> TestContext model (Persistence.Msg event msg)
+    -> TestContext model (Persistence.Msg data event msg)
+    -> TestContext model (Persistence.Msg data event msg)
 updateUi uiMsg =
     TestContext.update (uiMsg |> Persistence.uimsg)
 
@@ -189,7 +189,8 @@ all =
                         |> resolve (mocks.readRef "io.github.avh4.elm-persistent-data.test-app.root-v1") (Just <| Hash.toString <| hash batch2)
                         |> resolve (mocks.readContent (hash batch2)) batch2
                         |> resolve (mocks.readContent (hash batch1)) batch1
-                        |> resolve (mocks.readContent (hash batch2)) batch2
+                        -- TODO: Implement low-memory scanning in Persistence.Initializer
+                        -- |> resolve (mocks.readContent (hash batch2)) batch2
                         |> expectCurrent
                             (Persistence.Ready
                                 { list = [ "world", "hello" ] }
@@ -251,7 +252,7 @@ all =
                 \() ->
                     let
                         batch1 =
-                            """{}"""
+                            """{"events":[],"parent":null}"""
 
                         batch2 =
                             """{"events":[{"tag":"AddItem","$0":"world"}],"parent":""" ++ "\"" ++ Hash.toString (hash batch1) ++ """"}"""

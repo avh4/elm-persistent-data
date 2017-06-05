@@ -31,7 +31,8 @@ import Html exposing (Html)
 import Json.Decode exposing (Decoder)
 import Json.Encode
 import Navigation
-import Persistence.Batch as Batch
+import Persistence.Batch as Batch exposing (Batch)
+import Persistence.Initializer as Init
 import Process
 import ProgramRecord
 import Storage exposing (Storage)
@@ -76,13 +77,13 @@ type alias Config data event state msg =
 
 -}
 type alias Program flags data event state msg =
-    Platform.Program flags (Model data state) (Msg event msg)
+    Platform.Program flags (Model data state) (Msg data event msg)
 
 
 {-| A `ProgramRecord` type alias for persistent programs.
 -}
 type alias ProgramRecord flags data event state msg =
-    ProgramRecord.ProgramRecord flags Never (Model data state) (Msg event msg)
+    ProgramRecord.ProgramRecord flags Never (Model data state) (Msg data event msg)
 
 
 {-| The model for a persistence program.
@@ -99,7 +100,7 @@ type Model data state
 
 init :
     Config data event state msg
-    -> ( Model data state, Cmd (Msg event msg) )
+    -> ( Model data state, Cmd (Msg data event msg) )
 init config =
     ( Model
         { data = config.data.init
@@ -110,14 +111,35 @@ init config =
         }
     , Cmd.batch
         [ Cmd.map UiMsg (Tuple.second config.ui.init)
-        , case config.localCache of
-            Nothing ->
-                readRoot config
-
-            Just cacheConfig ->
-                Task.perform ReadCache cacheConfig.store.read
+        , startup config
+            |> Task.attempt Startup
         ]
     )
+
+
+startup : Config data event state msg -> Task String ( Maybe ( Hash, data ), Maybe Hash )
+startup config =
+    let
+        decoder cacheDecoder =
+            Json.Decode.map2 (,)
+                (Json.Decode.field "root" Hash.decode)
+                (Json.Decode.field "data" cacheDecoder)
+
+        parseCache cacheDecoder json =
+            Json.Decode.decodeString (decoder cacheDecoder) json
+                |> Result.toMaybe
+    in
+    Task.map2 (,)
+        (case config.localCache of
+            Nothing ->
+                Task.succeed Nothing
+
+            Just cacheConfig ->
+                cacheConfig.store.read
+                    |> Task.mapError never
+                    |> Task.map (Maybe.andThen (parseCache cacheConfig.decoder))
+        )
+        (readRootTask config)
 
 
 readRootTask : Config data event state msg -> Task String (Maybe Hash)
@@ -135,11 +157,6 @@ readRootTask config =
                     Just (Ok hash) ->
                         Task.succeed (Just hash)
             )
-
-
-readRoot : Config data event state msg -> Cmd (Msg event msg)
-readRoot config =
-    Task.attempt ReadRoot (readRootTask config)
 
 
 {-| The externally-inspectable state of a persistent program.
@@ -163,22 +180,34 @@ current (Model model) =
 
 {-| The Msg type for a persistent program.
 -}
-type Msg event msg
+type Msg data event msg
     = UiMsg msg
-    | ReadRoot (Result String (Maybe Hash))
-    | ReadHistory Hash (List Hash) (Result String String)
-    | ReadBatch (List Hash) (Result String String)
+    | Startup (Result String ( Maybe ( Hash, data ), Maybe Hash ))
+    | FetchBatch (Result String (Init.Next Hash data event))
     | WriteBatch (Result String Hash)
     | WriteRoot Hash (Result String ())
-    | ReadCache (Maybe String)
     | WriteCache ()
 
 
 {-| Not sure if this should be exposed... it's needed for testing, though
 -}
-uimsg : msg -> Msg event msg
+uimsg : msg -> Msg data event msg
 uimsg =
     UiMsg
+
+
+jsonTask : Decoder a -> Task String String -> Task String a
+jsonTask decoder task =
+    let
+        parse json =
+            case Json.Decode.decodeString decoder json of
+                Err message ->
+                    Task.fail message
+
+                Ok value ->
+                    Task.succeed value
+    in
+    task |> Task.andThen parse
 
 
 writeRoot : Config data event state msg -> Maybe Hash -> Hash -> Task String ()
@@ -188,13 +217,7 @@ writeRoot config previousRoot lastBatchId =
         (Hash.toString lastBatchId)
 
 
-readHistory : Config data event state msg -> Hash -> List Hash -> Cmd (Msg event msg)
-readHistory config batch whenDone =
-    config.storage.content.read batch
-        |> Task.attempt (ReadHistory batch whenDone)
-
-
-writeBatch : Config data event state msg -> Maybe Hash -> List event -> ( Hash, Cmd (Msg event msg) )
+writeBatch : Config data event state msg -> Maybe Hash -> List event -> ( Hash, Cmd (Msg data event msg) )
 writeBatch config parent events =
     let
         json =
@@ -207,7 +230,7 @@ writeBatch config parent events =
     )
 
 
-writeToCache : Config data event state msg -> Hash -> data -> Cmd (Msg event msg)
+writeToCache : Config data event state msg -> Hash -> data -> Cmd (Msg data event msg)
 writeToCache config hash data =
     case config.localCache of
         Nothing ->
@@ -225,10 +248,37 @@ writeToCache config hash data =
 
 update :
     Config data event state msg
-    -> Msg event msg
+    -> Msg data event msg
     -> Model data state
-    -> ( Model data state, Cmd (Msg event msg) )
+    -> ( Model data state, Cmd (Msg data event msg) )
 update config msg (Model model) =
+    let
+        handleInitResult result =
+            case result of
+                Init.Done rootId data ->
+                    ( Model
+                        { model
+                            | loaded = True
+                            , root = rootId
+                            , data = data
+                        }
+                    , case rootId of
+                        Nothing ->
+                            Cmd.none
+
+                        Just root ->
+                            -- Don't actually need to write if root is the same as what is currently cached
+                            writeToCache config root data
+                    )
+
+                Init.FetchBatch batchId continue ->
+                    ( Model model
+                    , config.storage.content.read batchId
+                        |> jsonTask (Batch.decoder config.data.decoder)
+                        |> Task.map (\batch -> continue <| Err ( batch.events, batch.parent ))
+                        |> Task.attempt FetchBatch
+                    )
+    in
     case msg of
         UiMsg m ->
             let
@@ -265,100 +315,30 @@ update config msg (Model model) =
                 ]
             )
 
-        ReadRoot (Ok Nothing) ->
-            ( Model { model | loaded = True, root = Nothing }
-            , Cmd.none
-            )
+        Startup (Ok ( cachedData, latestRoot )) ->
+            Init.init
+                { cachedData = cachedData |> Maybe.map (\( root, data ) -> { root = root, data = data })
+                , latestRoot = latestRoot
+                , emptyData = config.data.init
+                , fold = config.data.update
+                }
+                |> handleInitResult
 
-        ReadRoot (Ok (Just lastBatchName)) ->
-            if Just lastBatchName == model.root then
-                ( Model { model | loaded = True }, Cmd.none )
-            else
-                ( Model { model | root = Just lastBatchName }
-                , readHistory config lastBatchName []
-                )
-
-        ReadRoot (Err message) ->
+        Startup (Err message) ->
             ( Model
                 { model
                     | errors = ("Error reading root: " ++ message) :: model.errors
                 }
             , Process.sleep (5 * Time.second)
-                |> Task.andThen (\_ -> readRootTask config)
-                |> Task.attempt ReadRoot
+                |> Task.andThen (\_ -> startup config)
+                |> Task.attempt Startup
             )
 
-        ReadHistory id whenDone (Ok batchJson) ->
-            case Json.Decode.decodeString (Batch.decoder config.data.decoder) batchJson of
-                Ok batch ->
-                    case batch.parent of
-                        Nothing ->
-                            update config
-                                (ReadBatch whenDone (Ok batchJson))
-                                (Model model)
+        FetchBatch (Ok next) ->
+            handleInitResult next
 
-                        Just parent ->
-                            ( Model model
-                            , readHistory config parent (id :: whenDone)
-                            )
-
-                Err message ->
-                    ( Model
-                        { model
-                            | errors = ("Error decoding batch " ++ toString id ++ ": " ++ message) :: model.errors
-                        }
-                    , Cmd.none
-                    )
-
-        ReadHistory id _ (Err message) ->
-            ( Model
-                { model
-                    | errors = ("Error reading batch " ++ toString id ++ ": " ++ message) :: model.errors
-                }
-            , Cmd.none
-            )
-
-        ReadBatch rest (Ok batchJson) ->
-            case Json.Decode.decodeString (Batch.decoder config.data.decoder) batchJson of
-                Ok batch ->
-                    let
-                        newData =
-                            batch.events
-                                |> List.foldl config.data.update model.data
-                    in
-                    case rest of
-                        [] ->
-                            ( Model
-                                { model
-                                    | loaded = True
-                                    , data = newData
-                                }
-                            , case model.root of
-                                Nothing ->
-                                    Cmd.none
-
-                                Just root ->
-                                    writeToCache config root newData
-                            )
-
-                        next :: rest_ ->
-                            ( Model
-                                { model
-                                    | data = newData
-                                }
-                            , config.storage.content.read next
-                                |> Task.attempt (ReadBatch rest_)
-                            )
-
-                Err message ->
-                    ( Model
-                        { model
-                            | errors = ("Error decoding batch: " ++ message) :: model.errors
-                        }
-                    , Cmd.none
-                    )
-
-        ReadBatch _ (Err message) ->
+        FetchBatch (Err message) ->
+            -- TODO: retry
             ( Model
                 { model
                     | errors = ("Error reading batch: " ++ message) :: model.errors
@@ -395,34 +375,6 @@ update config msg (Model model) =
             , Cmd.none
             )
 
-        ReadCache Nothing ->
-            ( Model model, readRoot config )
-
-        ReadCache (Just json) ->
-            ( case config.localCache of
-                Nothing ->
-                    Model model
-
-                Just cacheConfig ->
-                    let
-                        decoder =
-                            Json.Decode.map2 CacheRecord
-                                (Json.Decode.field "root" <| Hash.decode)
-                                (Json.Decode.field "data" <| cacheConfig.decoder)
-                    in
-                    case Json.Decode.decodeString decoder json of
-                        Ok result ->
-                            Model
-                                { model
-                                    | data = result.data
-                                    , root = Just result.root
-                                }
-
-                        Err _ ->
-                            Model model
-            , readRoot config
-            )
-
         WriteCache () ->
             ( Model model, Cmd.none )
 
@@ -436,7 +388,7 @@ type alias CacheRecord data =
 subscriptions :
     Config data event state msg
     -> Model data state
-    -> Sub (Msg event msg)
+    -> Sub (Msg data event msg)
 subscriptions config =
     -- TODO: add tests for this
     \(Model model) ->
@@ -450,7 +402,7 @@ subscriptions config =
 view :
     Config data event state msg
     -> Model data state
-    -> Html (Msg event msg)
+    -> Html (Msg data event msg)
 view config (Model model) =
     if model.errors /= [] then
         Html.map never (config.errorView model.errors)

@@ -94,7 +94,7 @@ mocks =
     }
 
 
-start : TestContext (Persistence.Model TestApp.Data TestApp.UiState) (Persistence.Msg TestApp.Event TestApp.Msg)
+start : TestContext (Persistence.Model TestApp.Data TestApp.UiState) (Persistence.Msg TestApp.Data TestApp.Event TestApp.Msg)
 start =
     TestApp.program
         { refs =
@@ -119,8 +119,8 @@ start =
 
 updateUi :
     msg
-    -> TestContext model (Persistence.Msg event msg)
-    -> TestContext model (Persistence.Msg event msg)
+    -> TestContext model (Persistence.Msg data event msg)
+    -> TestContext model (Persistence.Msg data event msg)
 updateUi uiMsg =
     TestContext.update (uiMsg |> Persistence.uimsg)
 
