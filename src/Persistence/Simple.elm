@@ -158,7 +158,7 @@ debugProgram config =
                             ( control, Cmd.none, [] )
 
                         Nothing ->
-                            ( state, Cmd.none, [ Debug.Control.currentValue state ] )
+                            ( config.ui, Cmd.none, [ Debug.Control.currentValue state ] )
             , subscriptions = \data state -> Sub.none
             , view = debugView config.appId
             }
