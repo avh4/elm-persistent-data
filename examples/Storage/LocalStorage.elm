@@ -11,6 +11,7 @@ import Json.Encode
 import PersistentCache
 import Storage exposing (Storage)
 import Storage.Hash as Hash
+import Storage.Task
 import Task
 
 
@@ -29,26 +30,7 @@ cache =
 -}
 storage : Storage
 storage =
-    { refs =
-        { read =
-            \key ->
-                Task.fail "Not implemented"
-        , write =
-            \key oldValue newValue ->
-                Task.fail "Not implemented"
+    Storage.Task.storage
+        { get = PersistentCache.get cache
+        , add = PersistentCache.add cache
         }
-    , content =
-        { read =
-            \hash ->
-                PersistentCache.get cache (Hash.toString hash)
-                    |> Task.andThen (Maybe.map Task.succeed >> Maybe.withDefault (Task.fail "Not found"))
-        , write =
-            \content ->
-                let
-                    hash =
-                        Hash.ofString content
-                in
-                PersistentCache.add cache (Hash.toString hash) content
-                    |> Task.map (always hash)
-        }
-    }

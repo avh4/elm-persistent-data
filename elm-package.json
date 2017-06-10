@@ -8,11 +8,13 @@
     ],
     "exposed-modules": [
         "Persistence",
+        "Persistence.Simple",
         "Storage",
         "Storage.Debug",
         "Storage.Delay",
         "Storage.Hash",
-        "Storage.ExampleServer"
+        "Storage.ExampleServer",
+        "Storage.Task"
     ],
     "dependencies": {
         "avh4/elm-dropbox": "1.1.0 <= v < 2.0.0",
