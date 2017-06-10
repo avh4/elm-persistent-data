@@ -1,4 +1,4 @@
-module Persistence.Simple exposing (Config, program)
+module Persistence.Simple exposing (Config, DebugConfig, debugProgram, program)
 
 {-| A simplified wrapper for Persistence.program.
 
@@ -7,10 +7,17 @@ in `Persistence`.
 
 @docs program, Config
 
+
+## Even simpler programs
+
+@docs debugProgram, DebugConfig
+
 -}
 
+import Debug.Control
 import Dropbox
 import Html exposing (Html)
+import Html.Events exposing (onClick)
 import Json.Decode exposing (Decoder)
 import Json.Encode
 import Persistence
@@ -118,3 +125,65 @@ program config =
                     }
                 }
         }
+
+
+{-| -}
+type alias DebugConfig data event =
+    { appId : String
+    , dropboxAuthToken : String
+    , data :
+        { init : data
+        , update : event -> data -> data
+        , encoder : event -> Json.Encode.Value
+        , decoder : Decoder event
+        }
+    , ui : Debug.Control.Control event
+    }
+
+
+{-| An extremely simple way to create a program to test out your domain logic.
+This will provide an extremely simple UI allowing you to add events and see the resulting domain state.
+-}
+debugProgram : DebugConfig data event -> Persistence.Program Never data event (Debug.Control.Control event) (Maybe (Debug.Control.Control event))
+debugProgram config =
+    Persistence.program
+        { appId = config.appId
+        , data = config.data
+        , ui =
+            { init = ( config.ui, Cmd.none )
+            , update =
+                \data msg state ->
+                    case msg of
+                        Just control ->
+                            ( control, Cmd.none, [] )
+
+                        Nothing ->
+                            ( state, Cmd.none, [ Debug.Control.currentValue state ] )
+            , subscriptions = \data state -> Sub.none
+            , view = debugView config.appId
+            }
+        , loadingView = Html.text "Loading (TODO: make this look nicer)"
+        , errorView =
+            \errors ->
+                Html.div []
+                    [ Html.text "Errors:"
+                    , errors |> List.map (\i -> Html.li [] [ Html.text i ]) |> Html.ul []
+                    , Html.text "TODO: make this look nicer"
+                    ]
+        , storage =
+            Storage.Dropbox.storage <|
+                Dropbox.authorizationFromAccessToken config.dropboxAuthToken
+        , localCache = Nothing
+        }
+
+
+debugView : String -> data -> Debug.Control.Control event -> Html (Maybe (Debug.Control.Control event))
+debugView appId data control =
+    Html.div []
+        [ Html.h2 [] [ Html.text appId ]
+        , Html.h3 [] [ Html.text "data" ]
+        , Html.text (toString data)
+        , Html.h3 [] [ Html.text "new event" ]
+        , Debug.Control.view Just control
+        , Html.button [ onClick Nothing ] [ Html.text "Add" ]
+        ]
