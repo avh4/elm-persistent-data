@@ -11,6 +11,7 @@ import Storage.Hash as Hash
 import Task exposing (Task)
 
 
+{-| -}
 type alias Config =
     { get : String -> Task Never (Maybe String)
     , add : String -> String -> Task Never ()

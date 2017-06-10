@@ -87,6 +87,7 @@ type alias Config data event state msg =
     }
 
 
+{-| -}
 program : Config data event state msg -> Persistence.Program Never data event state msg
 program config =
     Persistence.program
