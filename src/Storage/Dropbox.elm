@@ -44,24 +44,37 @@ storage auth =
                     path =
                         "/refs/" ++ key
 
-                    fetchOldRev : Task String String
+                    ignoreNotFound err =
+                        case err of
+                            Dropbox.PathDownloadError _ ->
+                                Task.succeed Nothing
+
+                            _ ->
+                                Task.fail err
+
+                    fetchOldRev : Task String (Maybe String)
                     fetchOldRev =
                         Dropbox.download auth { path = path }
+                            |> Task.map Just
+                            |> Task.onError ignoreNotFound
                             |> Task.mapError toString
                             |> Task.andThen verifyContent
 
-                    verifyContent : Dropbox.DownloadResponse -> Task String String
+                    verifyContent : Maybe Dropbox.DownloadResponse -> Task String (Maybe String)
                     verifyContent response =
-                        if Just response.content == oldValue then
-                            Task.succeed response.rev
+                        if Maybe.map .content response == oldValue then
+                            Task.succeed (Maybe.map .rev response)
                         else
                             Task.fail (key ++ ": Existing content doesn't match")
 
-                    putNew : String -> Task String ()
+                    putNew : Maybe String -> Task String ()
                     putNew oldRev =
                         Dropbox.upload auth
                             { path = "/refs/" ++ key
-                            , mode = Dropbox.Update oldRev
+                            , mode =
+                                oldRev
+                                    |> Maybe.map Dropbox.Update
+                                    |> Maybe.withDefault Dropbox.Add
                             , autorename = False
                             , clientModified = Nothing
                             , mute = True
