@@ -6,7 +6,11 @@ node_js: "5.1"
 install:
   - npm install -f elm@0.18.0 elm-test@0.18.4
   - export PATH="`pwd`/node_modules/.bin:$PATH"
+  - elm-package install --yes
   - (cd tests; elm-package install --yes)
 
 script:
+  - elm-make --yes
+  - rsync -va elm-stuff/build-artifacts/ tests/elm-stuff/build-artifacts/
+  - rsync -va elm-stuff/build-artifacts/ examples/elm-stuff/build-artifacts/
   - ./check.sh
