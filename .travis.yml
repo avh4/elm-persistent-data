@@ -14,3 +14,9 @@ script:
   - rsync -va elm-stuff/build-artifacts/ tests/elm-stuff/build-artifacts/
   - rsync -va elm-stuff/build-artifacts/ examples/elm-stuff/build-artifacts/
   - ./check.sh
+
+cache:
+  directories:
+    - elm-stuff/build-artifacts
+    - tests/elm-stuff/build-artifacts
+    - examples/elm-stuff/build-artifacts
