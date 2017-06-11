@@ -18,16 +18,45 @@ decoder decodeEvent =
         (Json.Decode.field "parent" <| Json.Decode.nullable Hash.decode)
 
 
-encoder : (event -> Json.Encode.Value) -> Batch event -> Json.Encode.Value
-encoder encodeEvent { events, parent } =
-    [ ( "events"
-      , List.map encodeEvent events
-            |> Json.Encode.list
-      )
-    , ( "parent"
-      , parent
-            |> Maybe.map Hash.encode
-            |> Maybe.withDefault Json.Encode.null
-      )
-    ]
-        |> Json.Encode.object
+{-| This also verifies that the events can be decoded, and fails if they cannot.
+-}
+encoder : Decoder event -> (event -> Json.Encode.Value) -> Batch event -> Result String Json.Encode.Value
+encoder decodeEvent encodeEvent { events, parent } =
+    let
+        verifiedEvents =
+            List.foldr (\event -> Result.andThen (verifyEvent event)) (Ok []) events
+
+        verifyEvent event acc =
+            let
+                json =
+                    encodeEvent event
+
+                decoded =
+                    Json.Decode.decodeValue decodeEvent json
+            in
+            if Ok event /= decoded then
+                Err
+                    ("Encoded value does not decode:\n\nOriginal:\n  "
+                        ++ toString event
+                        ++ "\nJSON:\n  "
+                        ++ Json.Encode.encode 0 json
+                        ++ "\nDecoded:\n  "
+                        ++ toString decoded
+                    )
+            else
+                Ok (json :: acc)
+    in
+    case verifiedEvents of
+        Err message ->
+            Err message
+
+        Ok events ->
+            Json.Encode.object
+                [ ( "events", Json.Encode.list events )
+                , ( "parent"
+                  , parent
+                        |> Maybe.map Hash.encode
+                        |> Maybe.withDefault Json.Encode.null
+                  )
+                ]
+                |> Ok

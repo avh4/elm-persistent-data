@@ -217,17 +217,23 @@ writeRoot config previousRoot lastBatchId =
         (Hash.toString lastBatchId)
 
 
-writeBatch : Config data event state msg -> Maybe Hash -> List event -> ( Hash, Cmd (Msg data event msg) )
+writeBatch : Config data event state msg -> Maybe Hash -> List event -> Result String ( Hash, Cmd (Msg data event msg) )
 writeBatch config parent events =
     let
-        json =
-            Batch.encoder config.data.encoder { events = events, parent = parent }
-                |> Json.Encode.encode 0
+        batch =
+            Batch.encoder config.data.decoder config.data.encoder { events = events, parent = parent }
+                |> Result.map (Json.Encode.encode 0)
     in
-    ( Hash.ofString json
-    , config.storage.content.write json
-        |> Task.attempt WriteBatch
-    )
+    case batch of
+        Err message ->
+            Err message
+
+        Ok json ->
+            Ok
+                ( Hash.ofString json
+                , config.storage.content.write json
+                    |> Task.attempt WriteBatch
+                )
 
 
 writeToCache : Config data event state msg -> Hash -> data -> Cmd (Msg data event msg)
@@ -285,35 +291,48 @@ update config msg (Model model) =
                 ( newUi, uiCmd, events ) =
                     config.ui.update model.data m model.ui
 
-                ( newData, writeCmd, cacheCmd ) =
+                result =
                     case events of
                         [] ->
-                            ( model.data, Cmd.none, Cmd.none )
+                            Ok ( model.data, Cmd.none, Cmd.none )
 
                         _ ->
                             let
                                 newData =
                                     List.foldl config.data.update model.data events
-
-                                ( expectedHash, writeCmd_ ) =
-                                    writeBatch config model.root events
                             in
-                            ( newData
-                            , writeCmd_
-                            , writeToCache config expectedHash newData
-                            )
+                            case writeBatch config model.root events of
+                                Err message ->
+                                    Err message
+
+                                Ok ( expectedHash, writeCmd_ ) ->
+                                    Ok
+                                        ( newData
+                                        , writeCmd_
+                                        , writeToCache config expectedHash newData
+                                        )
             in
-            ( Model
-                { model
-                    | ui = newUi
-                    , data = newData
-                }
-            , Cmd.batch
-                [ writeCmd
-                , Cmd.map UiMsg uiCmd
-                , cacheCmd
-                ]
-            )
+            case result of
+                Err message ->
+                    ( Model
+                        { model
+                            | errors = ("Error writing events: " ++ message) :: model.errors
+                        }
+                    , Cmd.none
+                    )
+
+                Ok ( newData, writeCmd, cacheCmd ) ->
+                    ( Model
+                        { model
+                            | ui = newUi
+                            , data = newData
+                        }
+                    , Cmd.batch
+                        [ writeCmd
+                        , Cmd.map UiMsg uiCmd
+                        , cacheCmd
+                        ]
+                    )
 
         Startup (Ok ( cachedData, latestRoot )) ->
             Init.init
