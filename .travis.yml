@@ -4,19 +4,29 @@ language: node_js
 node_js: "5.1"
 
 install:
+  - |
+    if [ ! -d sysconfcpus/bin ];
+    then
+      git clone https://github.com/obmarg/libsysconfcpus.git;
+      cd libsysconfcpus;
+      ./configure --prefix=$TRAVIS_BUILD_DIR/sysconfcpus;
+      make && make install;
+      cd ..;
+    fi
   - npm install -f elm@0.18.0 elm-test@0.18.4
   - export PATH="`pwd`/node_modules/.bin:$PATH"
   - elm-package install --yes
   - (cd tests; elm-package install --yes)
 
 script:
-  - elm-make --yes
+  - $TRAVIS_BUILD_DIR/sysconfcpus/bin/sysconfcpus -n 2 elm-make --yes
   - rsync -va elm-stuff/build-artifacts/ tests/elm-stuff/build-artifacts/
   - rsync -va elm-stuff/build-artifacts/ examples/elm-stuff/build-artifacts/
   - ./check.sh
 
 cache:
   directories:
+    - sysconfcpus
     - elm-stuff/build-artifacts
     - tests/elm-stuff/build-artifacts
     - examples/elm-stuff/build-artifacts
