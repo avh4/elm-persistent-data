@@ -1,8 +1,10 @@
 module Persistence.SimpleAuth exposing (Config, Model, Msg, init, update, view)
 
+import Dropbox
 import Html exposing (Html)
 import Html.Attributes exposing (defaultValue, placeholder)
 import Html.Events exposing (onClick, onInput)
+import Navigation
 import Persistence.SimpleStorageConfig as StorageConfig exposing (StorageConfig)
 
 
@@ -13,10 +15,12 @@ type alias Config =
 
 type Model
     = Model
-        { step : Step
+        { location : Navigation.Location
+        , step : Step
         , config : Config
         , dropboxAuthToken : String
         , dropboxClientId : String
+        , flashMessages : List String
         }
 
 
@@ -38,19 +42,63 @@ type Msg
     | ChangeDropboxClientId String
 
 
-init : Config -> ( Model, Cmd Msg )
-init config =
-    ( Model
-        { step = Choose
-        , config = config
-        , dropboxAuthToken = ""
-        , dropboxClientId = ""
-        }
-    , Cmd.none
-    )
+init : Config -> Navigation.Location -> Result ( Model, Cmd Msg ) ( StorageConfig, Cmd never )
+init config location =
+    let
+        model =
+            { location = location
+            , step = Choose
+            , config = config
+            , dropboxAuthToken = ""
+            , dropboxClientId = ""
+            , flashMessages = []
+            }
+
+        dropboxResult =
+            Dropbox.parseAuthorizeResult location
+
+        clearDropboxRedirectResult =
+            -- TODO: preserve other fragment data if there was any (is that even possible after a Dropbox redirect?)
+            -- TODO: don't leave the unnecessary "#" at the end of the URL
+            Navigation.modifyUrl "#"
+    in
+    case dropboxResult of
+        Just (Dropbox.AuthorizeOk { userAuth }) ->
+            Ok
+                ( StorageConfig.Dropbox userAuth
+                , clearDropboxRedirectResult
+                )
+
+        Just (Dropbox.DropboxAuthorizeErr err) ->
+            Err
+                ( Model
+                    { model
+                        | step = Choose
+                        , flashMessages =
+                            [ "Dropbox authentication failed: " ++ err.errorDescription ]
+                    }
+                , clearDropboxRedirectResult
+                )
+
+        Just (Dropbox.UnknownAccessTokenErr _) ->
+            Err
+                ( Model
+                    { model
+                        | step = Choose
+                        , flashMessages =
+                            [ "Dropbox authentication failed because Dropbox provided invalid data.  This shouldn't normally happen." ]
+                    }
+                , clearDropboxRedirectResult
+                )
+
+        Nothing ->
+            Err
+                ( Model model
+                , Cmd.none
+                )
 
 
-update : Msg -> Model -> Result ( Model, Cmd Msg ) StorageConfig
+update : Msg -> Model -> Result ( Model, Cmd Msg ) ( StorageConfig, Cmd never )
 update msg (Model model) =
     let
         continue newModel =
@@ -58,7 +106,20 @@ update msg (Model model) =
     in
     case ( model.step, msg ) of
         ( _, ChooseDropbox clientId ) ->
-            continue { model | step = Dropbox }
+            Err
+                ( Model model
+                  -- Dropbox.authorize will redirect, so no need to change the model
+                , Dropbox.authorize
+                    { clientId = clientId
+                    , state = Nothing
+                    , requireRole = Nothing
+                    , forceReapprove = False
+                    , disableSignup = False
+                    , locale = Nothing
+                    , forceReauthentication = False
+                    }
+                    model.location
+                )
 
         ( _, ChooseChooseCustom ) ->
             continue { model | step = ChooseCustom }
@@ -73,7 +134,10 @@ update msg (Model model) =
             continue { model | dropboxAuthToken = new }
 
         ( _, CompleteCustomDropboxAuthToken authToken ) ->
-            Ok (StorageConfig.Dropbox authToken)
+            Ok
+                ( StorageConfig.Dropbox <| Dropbox.authorizationFromAccessToken authToken
+                , Cmd.none
+                )
 
         ( _, ChangeDropboxClientId new ) ->
             continue { model | dropboxClientId = new }
@@ -91,7 +155,11 @@ view (Model model) =
     case model.step of
         Choose ->
             Html.div []
-                [ case model.config.dropboxAppKey of
+                [ -- TODO: maybe move flash message outside of Choose?
+                  model.flashMessages
+                    |> List.map (\m -> Html.li [] [ Html.text m ])
+                    |> Html.ul []
+                , case model.config.dropboxAppKey of
                     Just clientId ->
                         button (ChooseDropbox clientId) "Dropbox"
 

@@ -22,6 +22,7 @@ import Html exposing (Html)
 import Html.Events exposing (onClick)
 import Json.Decode exposing (Decoder)
 import Json.Encode
+import Navigation
 import Persistence
 import Persistence.SimpleAuth as SimpleAuth
 import Persistence.SimpleStorageConfig as StorageConfig exposing (StorageConfig)
@@ -103,13 +104,14 @@ type alias Config data event state msg =
 
 
 type Model data event state msg
-    = LoadingAuth
+    = LoadingAuth Navigation.Location
     | AuthUi SimpleAuth.Model
     | MainApp (Persistence.Config data event state msg) (Persistence.Model data state)
 
 
 type Msg data event msg
     = NoOp
+    | ChangeLocation Navigation.Location
     | LoadedAuth (Maybe String)
     | AuthUiMsg SimpleAuth.Msg
     | MainAppMsg (Persistence.Msg data event msg)
@@ -157,30 +159,65 @@ program config =
                 |> Tuple.mapFirst (MainApp persConfig)
                 |> Tuple.mapSecond (Cmd.map MainAppMsg)
 
-        startAuth =
+        startAuth location =
             SimpleAuth.init
                 { dropboxAppKey = config.serviceAppKeys.dropbox
                 }
-                |> Tuple.mapFirst AuthUi
-                |> Tuple.mapSecond (Cmd.map AuthUiMsg)
+                location
+                |> handleAuthUiResult
+
+        handleAuthUiResult result =
+            case result of
+                Err continue ->
+                    continue
+                        |> Tuple.mapFirst AuthUi
+                        |> Tuple.mapSecond (Cmd.map AuthUiMsg)
+
+                Ok ( storageConfig, cmd ) ->
+                    let
+                        persistAuth =
+                            storageConfig
+                                |> StorageConfig.encode
+                                |> Json.Encode.encode 0
+                                |> config.localStorage.add ".auth"
+                                |> Task.perform (\() -> NoOp)
+
+                        ( newModel, persCmds ) =
+                            startApp storageConfig
+                    in
+                    ( newModel
+                    , Cmd.batch
+                        [ persCmds
+                        , persistAuth
+                        , cmd
+                        ]
+                    )
     in
-    Html.program
+    Navigation.program
+        ChangeLocation
         { init =
-            ( LoadingAuth
-            , config.localStorage.get ".auth"
-                |> Task.perform LoadedAuth
-            )
+            \location ->
+                ( LoadingAuth location
+                , config.localStorage.get ".auth"
+                    |> Task.perform LoadedAuth
+                )
         , update =
             \msg model ->
                 case ( msg, model ) of
                     ( NoOp, _ ) ->
                         ( model, Cmd.none )
 
-                    ( LoadedAuth Nothing, LoadingAuth ) ->
-                        -- No auth data was stored, so ask the user to log in
-                        startAuth
+                    ( ChangeLocation location, LoadingAuth _ ) ->
+                        ( LoadingAuth location, Cmd.none )
 
-                    ( LoadedAuth (Just string), LoadingAuth ) ->
+                    ( ChangeLocation _, _ ) ->
+                        ( model, Cmd.none )
+
+                    ( LoadedAuth Nothing, LoadingAuth location ) ->
+                        -- No auth data was stored, so ask the user to log in
+                        startAuth location
+
+                    ( LoadedAuth (Just string), LoadingAuth location ) ->
                         case Json.Decode.decodeString StorageConfig.decoder string of
                             Err message ->
                                 -- Assuming no one else wrote to the ".auth" key,
@@ -190,7 +227,7 @@ program config =
                                 -- (which will force the user to log in again)
                                 message
                                     |> Debug.log "Failed to decode stored auth info"
-                                    |> always startAuth
+                                    |> always (startAuth location)
 
                             Ok storageConfig ->
                                 startApp storageConfig
@@ -200,30 +237,8 @@ program config =
                         ( model, Cmd.none )
 
                     ( AuthUiMsg msg, AuthUi model ) ->
-                        case SimpleAuth.update msg model of
-                            Err continue ->
-                                continue
-                                    |> Tuple.mapFirst AuthUi
-                                    |> Tuple.mapSecond (Cmd.map AuthUiMsg)
-
-                            Ok storageConfig ->
-                                let
-                                    persistAuth =
-                                        storageConfig
-                                            |> StorageConfig.encode
-                                            |> Json.Encode.encode 0
-                                            |> config.localStorage.add ".auth"
-                                            |> Task.perform (\() -> NoOp)
-
-                                    ( newModel, persCmds ) =
-                                        startApp storageConfig
-                                in
-                                ( newModel
-                                , Cmd.batch
-                                    [ persCmds
-                                    , persistAuth
-                                    ]
-                                )
+                        SimpleAuth.update msg model
+                            |> handleAuthUiResult
 
                     ( MainAppMsg msg, MainApp config model ) ->
                         Persistence.update config msg model
@@ -233,7 +248,7 @@ program config =
                     ( MainAppMsg _, _ ) ->
                         Debug.crash "Internal error: We got a main app message before we started the main app!  This should never be possible!"
 
-                    ( AuthUiMsg _, LoadingAuth ) ->
+                    ( AuthUiMsg _, LoadingAuth _ ) ->
                         Debug.crash "Internal error: We got an auth ui message before we started the auth ui!  This should never be possible!"
 
                     ( _, MainApp _ _ ) ->
@@ -242,7 +257,7 @@ program config =
         , subscriptions =
             \model ->
                 case model of
-                    LoadingAuth ->
+                    LoadingAuth _ ->
                         Sub.none
 
                     AuthUi _ ->
@@ -254,7 +269,7 @@ program config =
         , view =
             \model ->
                 case model of
-                    LoadingAuth ->
+                    LoadingAuth _ ->
                         -- This should be nearly instantaneous (just a read to localstorage, so no need to show anything)
                         Html.text ""
 
