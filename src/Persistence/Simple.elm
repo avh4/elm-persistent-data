@@ -5,6 +5,8 @@ module Persistence.Simple exposing (Config, DebugConfig, debugProgram, program)
 NOTE: This module will probably go away before 1.0.0 and the functions here will replace the current functions
 in `Persistence`.
 
+TODO: how to let the user log out? Probably via intercepting a special URL fragment
+
 @docs program, Config
 
 
@@ -21,6 +23,8 @@ import Html.Events exposing (onClick)
 import Json.Decode exposing (Decoder)
 import Json.Encode
 import Persistence
+import Persistence.SimpleAuth as SimpleAuth
+import Persistence.SimpleStorageConfig as StorageConfig exposing (StorageConfig)
 import Storage.Cache
 import Storage.Dropbox
 import Storage.Task
@@ -65,7 +69,9 @@ import Task exposing (Task)
     You can implement these tasks using [ports](https://guide.elm-lang.org/interop/javascript.html),
     or using the unpublished [elm-lang/persistent-cache](https://github.com/elm-lang/persistent-cache).
     (TODO: add examples of how to do this)
-  - dropboxAuthToken: This will go away once auth is better integrated.
+  - serviceAppKeys: Application client ids (a.k.a. app keys)
+    You should provide as many of these as possible to allow your
+    users the most choice in where their data is stored.
 
 -}
 type alias Config data event state msg =
@@ -90,40 +96,175 @@ type alias Config data event state msg =
         { get : String -> Task Never (Maybe String)
         , add : String -> String -> Task Never ()
         }
-    , dropboxAuthToken : String
+    , serviceAppKeys :
+        { dropbox : Maybe String
+        }
     }
 
 
+type Model data event state msg
+    = LoadingAuth
+    | AuthUi SimpleAuth.Model
+    | MainApp (Persistence.Config data event state msg) (Persistence.Model data state)
+
+
+type Msg data event msg
+    = NoOp
+    | LoadedAuth (Maybe String)
+    | AuthUiMsg SimpleAuth.Msg
+    | MainAppMsg (Persistence.Msg data event msg)
+
+
 {-| -}
-program : Config data event state msg -> Persistence.Program Never data event state msg
+program :
+    Config data event state msg
+    -> Platform.Program Never (Model data event state msg) (Msg data event msg)
 program config =
-    Persistence.program
-        { appId = config.appId
-        , data = config.data
-        , ui = config.ui
-        , loadingView = Html.text "Loading (TODO: make this look nicer)"
-        , errorView =
-            \errors ->
-                Html.div []
-                    [ Html.text "Errors:"
-                    , errors |> List.map (\i -> Html.li [] [ Html.text i ]) |> Html.ul []
-                    , Html.text "TODO: make this look nicer"
-                    ]
-        , storage =
-            Storage.Cache.cache
-                (Storage.Task.storage config.localStorage)
-                (Storage.Dropbox.storage <|
-                    Dropbox.authorizationFromAccessToken config.dropboxAuthToken
-                )
-        , localCache =
-            Just
-                { encoder = config.dataCache.encoder
-                , decoder = config.dataCache.decoder
-                , store =
-                    { read = config.localStorage.get ".data"
-                    , write = config.localStorage.add ".data"
+    let
+        realConfig storage =
+            { appId = config.appId
+            , data = config.data
+            , ui = config.ui
+            , loadingView = Html.text "Loading (TODO: make this look nicer)"
+            , errorView =
+                \errors ->
+                    Html.div []
+                        [ Html.text "Errors:"
+                        , errors |> List.map (\i -> Html.li [] [ Html.text i ]) |> Html.ul []
+                        , Html.text "TODO: make this look nicer"
+                        ]
+            , storage =
+                Storage.Cache.cache
+                    (Storage.Task.storage config.localStorage)
+                    storage
+            , localCache =
+                Just
+                    { encoder = config.dataCache.encoder
+                    , decoder = config.dataCache.decoder
+                    , store =
+                        { read = config.localStorage.get ".data"
+                        , write = config.localStorage.add ".data"
+                        }
                     }
+            }
+
+        startApp storageConfig =
+            let
+                persConfig =
+                    realConfig (StorageConfig.toStorage storageConfig)
+            in
+            Persistence.init persConfig
+                |> Tuple.mapFirst (MainApp persConfig)
+                |> Tuple.mapSecond (Cmd.map MainAppMsg)
+
+        startAuth =
+            SimpleAuth.init
+                { dropboxAppKey = config.serviceAppKeys.dropbox
                 }
+                |> Tuple.mapFirst AuthUi
+                |> Tuple.mapSecond (Cmd.map AuthUiMsg)
+    in
+    Html.program
+        { init =
+            ( LoadingAuth
+            , config.localStorage.get ".auth"
+                |> Task.perform LoadedAuth
+            )
+        , update =
+            \msg model ->
+                case ( msg, model ) of
+                    ( NoOp, _ ) ->
+                        ( model, Cmd.none )
+
+                    ( LoadedAuth Nothing, LoadingAuth ) ->
+                        -- No auth data was stored, so ask the user to log in
+                        startAuth
+
+                    ( LoadedAuth (Just string), LoadingAuth ) ->
+                        case Json.Decode.decodeString StorageConfig.decoder string of
+                            Err message ->
+                                -- Assuming no one else wrote to the ".auth" key,
+                                -- this means that an older version of the code wrote something we can't read.
+                                -- That means there's a bug in elm-persistent storage, and there's nothing the user or the app developer can do,
+                                -- So we simply log it (to aid debugging) and pretend no auth data is stored
+                                -- (which will force the user to log in again)
+                                message
+                                    |> Debug.log "Failed to decode stored auth info"
+                                    |> always startAuth
+
+                            Ok storageConfig ->
+                                startApp storageConfig
+
+                    ( LoadedAuth _, _ ) ->
+                        -- Got auth data, but auth already finished; just ignore it
+                        ( model, Cmd.none )
+
+                    ( AuthUiMsg msg, AuthUi model ) ->
+                        case SimpleAuth.update msg model of
+                            Err continue ->
+                                continue
+                                    |> Tuple.mapFirst AuthUi
+                                    |> Tuple.mapSecond (Cmd.map AuthUiMsg)
+
+                            Ok storageConfig ->
+                                let
+                                    persistAuth =
+                                        storageConfig
+                                            |> StorageConfig.encode
+                                            |> Json.Encode.encode 0
+                                            |> config.localStorage.add ".auth"
+                                            |> Task.perform (\() -> NoOp)
+
+                                    ( newModel, persCmds ) =
+                                        startApp storageConfig
+                                in
+                                ( newModel
+                                , Cmd.batch
+                                    [ persCmds
+                                    , persistAuth
+                                    ]
+                                )
+
+                    ( MainAppMsg msg, MainApp config model ) ->
+                        Persistence.update config msg model
+                            |> Tuple.mapFirst (MainApp config)
+                            |> Tuple.mapSecond (Cmd.map MainAppMsg)
+
+                    ( MainAppMsg _, _ ) ->
+                        Debug.crash "Internal error: We got a main app message before we started the main app!  This should never be possible!"
+
+                    ( AuthUiMsg _, LoadingAuth ) ->
+                        Debug.crash "Internal error: We got an auth ui message before we started the auth ui!  This should never be possible!"
+
+                    ( _, MainApp _ _ ) ->
+                        -- An auth UI message came in after auth finished; just ignore it
+                        ( model, Cmd.none )
+        , subscriptions =
+            \model ->
+                case model of
+                    LoadingAuth ->
+                        Sub.none
+
+                    AuthUi _ ->
+                        Sub.none
+
+                    MainApp config model ->
+                        Persistence.subscriptions config model
+                            |> Sub.map MainAppMsg
+        , view =
+            \model ->
+                case model of
+                    LoadingAuth ->
+                        -- This should be nearly instantaneous (just a read to localstorage, so no need to show anything)
+                        Html.text ""
+
+                    AuthUi model ->
+                        SimpleAuth.view model
+                            |> Html.map AuthUiMsg
+
+                    MainApp config model ->
+                        Persistence.view config model
+                            |> Html.map MainAppMsg
         }
 
 

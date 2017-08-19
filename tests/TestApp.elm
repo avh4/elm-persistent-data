@@ -1,4 +1,4 @@
-module TestApp exposing (Data, Event, Msg(..), UiState, program, programRecord)
+module TestApp exposing (Data, Event, Msg(..), UiState, appId, data, dataDecoder, dataEncoder, program, programRecord, ui)
 
 import Html exposing (Html)
 import Html.Attributes
@@ -118,21 +118,32 @@ view data state =
         ]
 
 
+appId : String
+appId =
+    "io.github.avh4.elm-persistent-data.test-app"
+
+
+data =
+    { init = { list = [] }
+    , update = update
+    , decoder = decoder
+    , encoder = encoder
+    }
+
+
+ui =
+    { init = ( { input = "" }, Cmd.none )
+    , update = updateUi
+    , subscriptions = \_ _ -> Sub.none
+    , view = view
+    }
+
+
 programRecord : Storage -> Maybe Storage.CacheStore -> Persistence.ProgramRecord Never Data Event UiState Msg
 programRecord storage cacheStore =
     Persistence.programRecord
-        { data =
-            { init = { list = [] }
-            , update = update
-            , decoder = decoder
-            , encoder = encoder
-            }
-        , ui =
-            { init = ( { input = "" }, Cmd.none )
-            , update = updateUi
-            , subscriptions = \_ _ -> Sub.none
-            , view = view
-            }
+        { data = data
+        , ui = ui
         , loadingView = Html.text "Loading..."
         , errorView =
             \errors ->
@@ -141,7 +152,7 @@ programRecord storage cacheStore =
                     , errors |> List.map (\i -> Html.li [] [ Html.text i ]) |> Html.ul []
                     ]
         , storage = storage
-        , appId = "io.github.avh4.elm-persistent-data.test-app"
+        , appId = appId
         , localCache =
             cacheStore
                 |> Maybe.map

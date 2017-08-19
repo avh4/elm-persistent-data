@@ -7,10 +7,14 @@ module Persistence
         , Program
         , ProgramRecord
         , current
+        , init
         , program
         , programRecord
         , programWithNavigation
+        , subscriptions
         , uimsg
+        , update
+        , view
         )
 
 {-|
@@ -24,6 +28,7 @@ module Persistence
 ## Stuff you shouldn't normally need
 
 @docs Model, Msg, uimsg, PersistenceState, current
+@docs init, update, subscriptions, view
 
 -}
 
@@ -98,6 +103,11 @@ type Model data state
         }
 
 
+{-| The `init` value for a Persistence.Program.
+
+You should normally use `program` instead of using this directly.
+
+-}
 init :
     Config data event state msg
     -> ( Model data state, Cmd (Msg data event msg) )
@@ -252,6 +262,11 @@ writeToCache config hash data =
                 |> Task.perform WriteCache
 
 
+{-| The `update` function for a Persistence.Program.
+
+You should normally use `program` instead of using this directly.
+
+-}
 update :
     Config data event state msg
     -> Msg data event msg
@@ -404,6 +419,11 @@ type alias CacheRecord data =
     }
 
 
+{-| The `subscriptions` function for a Persistence.Program.
+
+You should normally use `program` instead of using this directly.
+
+-}
 subscriptions :
     Config data event state msg
     -> Model data state
@@ -418,6 +438,11 @@ subscriptions config =
             Sub.none
 
 
+{-| The `view` function for a Persistence.Program.
+
+You should normally use `program` instead of using this directly.
+
+-}
 view :
     Config data event state msg
     -> Model data state
