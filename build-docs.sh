@@ -3,4 +3,4 @@
 set -ex
 
 ./check.sh
-(cd examples && elm-make --yes SimpleApp.elm --output ../docs/SimpleApp.elm.html)
+(cd examples && elm-make --yes --debug SimpleApp.elm --output ../docs/SimpleApp.elm.html)
