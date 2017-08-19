@@ -104,9 +104,6 @@ view : Data -> UiState -> Html Msg
 view data state =
     Html.div []
         [ Html.h3 [] [ Html.text "Persistent TODO list" ]
-        , Html.ul []
-            (List.map (\i -> Html.li [] [ Html.text i ]) data.list)
-        , Html.hr [] []
         , Html.form [ Html.Events.onSubmit Add ]
             [ Html.input
                 [ Html.Events.onInput Typed
@@ -115,6 +112,9 @@ view data state =
                 []
             , Html.button [] [ Html.text "Add" ]
             ]
+        , Html.hr [] []
+        , Html.ul []
+            (List.map (\i -> Html.li [] [ Html.text i ]) data.list)
         ]
 
 
