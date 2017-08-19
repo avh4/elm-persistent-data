@@ -41,7 +41,7 @@ main =
             }
         , serviceAppKeys =
             { dropbox =
-                -- This app is configured for https://avh4.github.io/elm-persistent-data/SimpleApp.elm
+                -- This app is configured for https://avh4.github.io/elm-persistent-data/SimpleApp.elm.html
                 -- If you are running this example at a different URL, you will need to create your own Dropbox App,
                 -- enter the "App key" here, add this page's URL to the app's redirect URLs, and allow implicit grant.
                 Just "gpoqst938n3ic81"
