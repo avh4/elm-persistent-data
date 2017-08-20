@@ -515,7 +515,8 @@ programWithNavigation locationToMessage config =
                 init config
                     |> -- TODO something's probably wrong if the initial location
                        -- (or actually any location change) causes a persistable event
-                       -- probably the API should be changes to prevent that possibility
+                       -- probably the API should be changes to prevent that possibility.
+                       -- See the alternative approach in Persistence.Simple where Config.init takes a param.
                        programAndThen (update config (locationToMessage location |> UiMsg))
         , update = update config
         , subscriptions = subscriptions config

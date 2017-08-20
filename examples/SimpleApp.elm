@@ -19,13 +19,14 @@ main =
             }
         , ui =
             let
-                ({ view } as ui) =
+                ui =
                     TestApp.ui
             in
             { ui
-                | view =
+                | init = \() -> ui.init
+                , view =
                     \data state ->
-                        view data state
+                        ui.view data state
                             |> BeautifulExample.view
                                 { title = "Persistence.Simple demo"
                                 , details = Just """This is an example of using Persistence.Simple which provides a standard authentication UI making it simple to give your users a choice of where to store their data."""

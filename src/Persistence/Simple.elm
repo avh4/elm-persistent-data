@@ -1,4 +1,4 @@
-module Persistence.Simple exposing (Config, DebugConfig, debugProgram, program)
+module Persistence.Simple exposing (Config, DebugConfig, debugProgram, program, programWithNavigation)
 
 {-| A simplified wrapper for Persistence.program.
 
@@ -7,7 +7,7 @@ in `Persistence`.
 
 TODO: how to let the user log out? Probably via intercepting a special URL fragment
 
-@docs program, Config
+@docs Config, program, programWithNavigation
 
 
 ## Even simpler programs
@@ -73,7 +73,7 @@ import Task exposing (Task)
     users the most choice in where their data is stored.
 
 -}
-type alias Config data event state msg =
+type alias Config flags data event state msg =
     { appId : String
     , data :
         { init : data
@@ -86,7 +86,7 @@ type alias Config data event state msg =
         , decoder : Decoder data
         }
     , ui :
-        { init : ( state, Cmd msg )
+        { init : flags -> ( state, Cmd msg )
         , update : data -> msg -> state -> ( state, Cmd msg, List event )
         , subscriptions : data -> state -> Sub msg
         , view : data -> state -> Html msg
@@ -103,7 +103,7 @@ type alias Config data event state msg =
 
 type Model data event state msg
     = LoadingAuth Navigation.Location
-    | AuthUi SimpleAuth.Model
+    | AuthUi Navigation.Location SimpleAuth.Model
     | MainApp (Persistence.Config data event state msg) (Persistence.Model data state)
 
 
@@ -117,10 +117,33 @@ type Msg data event msg
 
 {-| -}
 program :
-    Config data event state msg
+    Config () data event state msg
     -> Platform.Program Never (Model data event state msg) (Msg data event msg)
 program config =
     program_
+        Nothing
+        (always ())
+        (Just
+            { encoder = config.dataCache.encoder
+            , decoder = config.dataCache.decoder
+            , store =
+                { read = config.localStorage.get ".data"
+                , write = config.localStorage.add ".data"
+                }
+            }
+        )
+        config
+
+
+{-| -}
+programWithNavigation :
+    (Navigation.Location -> msg)
+    -> Config Navigation.Location data event state msg
+    -> Platform.Program Never (Model data event state msg) (Msg data event msg)
+programWithNavigation onLocationChange config =
+    program_
+        (Just onLocationChange)
+        identity
         (Just
             { encoder = config.dataCache.encoder
             , decoder = config.dataCache.decoder
@@ -138,15 +161,22 @@ type alias Program flags data event state msg =
 
 
 program_ :
-    Maybe (Persistence.LocalCache data)
-    -> Config data event state msg
+    Maybe (Navigation.Location -> msg)
+    -> (Navigation.Location -> flags)
+    -> Maybe (Persistence.LocalCache data)
+    -> Config flags data event state msg
     -> Program Never data event state msg
-program_ localCache config =
+program_ onLocationChange makeFlags localCache config =
     let
-        realConfig storage =
+        realConfig location storage =
             { appId = config.appId
             , data = config.data
-            , ui = config.ui
+            , ui =
+                { init = config.ui.init (makeFlags location)
+                , update = config.ui.update
+                , subscriptions = config.ui.subscriptions
+                , view = config.ui.view
+                }
             , loadingView = Html.text "Loading (TODO: make this look nicer)"
             , errorView =
                 \errors ->
@@ -162,10 +192,10 @@ program_ localCache config =
             , localCache = localCache
             }
 
-        startApp storageConfig =
+        startApp location storageConfig =
             let
                 persConfig =
-                    realConfig (StorageConfig.toStorage storageConfig)
+                    realConfig location (StorageConfig.toStorage storageConfig)
             in
             Persistence.init persConfig
                 |> Tuple.mapFirst (MainApp persConfig)
@@ -176,13 +206,13 @@ program_ localCache config =
                 { dropboxAppKey = config.serviceAppKeys.dropbox
                 }
                 location
-                |> handleAuthUiResult
+                |> handleAuthUiResult location
 
-        handleAuthUiResult result =
+        handleAuthUiResult location result =
             case result of
                 Err continue ->
                     continue
-                        |> Tuple.mapFirst AuthUi
+                        |> Tuple.mapFirst (AuthUi location)
                         |> Tuple.mapSecond (Cmd.map AuthUiMsg)
 
                 Ok ( storageConfig, cmd ) ->
@@ -195,7 +225,7 @@ program_ localCache config =
                                 |> Task.perform (\() -> NoOp)
 
                         ( newModel, persCmds ) =
-                            startApp storageConfig
+                            startApp location storageConfig
                     in
                     ( newModel
                     , Cmd.batch
@@ -222,6 +252,16 @@ program_ localCache config =
                     ( ChangeLocation location, LoadingAuth _ ) ->
                         ( LoadingAuth location, Cmd.none )
 
+                    ( ChangeLocation location, MainApp config model ) ->
+                        case onLocationChange of
+                            Just msg ->
+                                Persistence.update config (Persistence.uimsg <| msg location) model
+                                    |> Tuple.mapFirst (MainApp config)
+                                    |> Tuple.mapSecond (Cmd.map MainAppMsg)
+
+                            Nothing ->
+                                ( MainApp config model, Cmd.none )
+
                     ( ChangeLocation _, _ ) ->
                         ( model, Cmd.none )
 
@@ -242,15 +282,15 @@ program_ localCache config =
                                     |> always (startAuth location)
 
                             Ok storageConfig ->
-                                startApp storageConfig
+                                startApp location storageConfig
 
                     ( LoadedAuth _, _ ) ->
                         -- Got auth data, but auth already finished; just ignore it
                         ( model, Cmd.none )
 
-                    ( AuthUiMsg msg, AuthUi model ) ->
+                    ( AuthUiMsg msg, AuthUi location model ) ->
                         SimpleAuth.update msg model
-                            |> handleAuthUiResult
+                            |> handleAuthUiResult location
 
                     ( MainAppMsg msg, MainApp config model ) ->
                         Persistence.update config msg model
@@ -272,7 +312,7 @@ program_ localCache config =
                     LoadingAuth _ ->
                         Sub.none
 
-                    AuthUi _ ->
+                    AuthUi _ _ ->
                         Sub.none
 
                     MainApp config model ->
@@ -285,7 +325,7 @@ program_ localCache config =
                         -- This should be nearly instantaneous (just a read to localstorage, so no need to show anything)
                         Html.text ""
 
-                    AuthUi model ->
+                    AuthUi _ model ->
                         SimpleAuth.view model
                             |> Html.map AuthUiMsg
 
@@ -318,7 +358,10 @@ debugProgram :
     DebugConfig data event
     -> Program Never data event (Debug.Control.Control event) (Maybe (Debug.Control.Control event))
 debugProgram config =
-    program_ Nothing
+    program_
+        Nothing
+        (always ())
+        Nothing
         { appId = config.appId
         , data = config.data
         , dataCache =
@@ -326,7 +369,7 @@ debugProgram config =
             , decoder = Json.Decode.fail "Persistence.Simple.debugProgram does not implement a data decoder.  Use Persistence.Simple.program instead if you want computed date caching."
             }
         , ui =
-            { init = ( config.ui, Cmd.none )
+            { init = \() -> ( config.ui, Cmd.none )
             , update =
                 \data msg state ->
                     case msg of
@@ -356,3 +399,12 @@ debugView appId data control =
         , Debug.Control.view Just control
         , Html.button [ onClick Nothing ] [ Html.text "Add" ]
         ]
+
+
+programAndThen : (a -> ( b, Cmd msg )) -> ( a, Cmd msg ) -> ( b, Cmd msg )
+programAndThen next ( a, cmdA ) =
+    let
+        ( b, cmdB ) =
+            next a
+    in
+    ( b, Cmd.batch [ cmdA, cmdB ] )
