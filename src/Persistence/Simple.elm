@@ -17,7 +17,6 @@ TODO: how to let the user log out? Probably via intercepting a special URL fragm
 -}
 
 import Debug.Control
-import Dropbox
 import Html exposing (Html)
 import Html.Events exposing (onClick)
 import Json.Decode exposing (Decoder)
@@ -27,7 +26,6 @@ import Persistence
 import Persistence.SimpleAuth as SimpleAuth
 import Persistence.SimpleStorageConfig as StorageConfig exposing (StorageConfig)
 import Storage.Cache
-import Storage.Dropbox
 import Storage.Task
 import Task exposing (Task)
 
@@ -122,6 +120,28 @@ program :
     Config data event state msg
     -> Platform.Program Never (Model data event state msg) (Msg data event msg)
 program config =
+    program_
+        (Just
+            { encoder = config.dataCache.encoder
+            , decoder = config.dataCache.decoder
+            , store =
+                { read = config.localStorage.get ".data"
+                , write = config.localStorage.add ".data"
+                }
+            }
+        )
+        config
+
+
+type alias Program flags data event state msg =
+    Platform.Program flags (Model data event state msg) (Msg data event msg)
+
+
+program_ :
+    Maybe (Persistence.LocalCache data)
+    -> Config data event state msg
+    -> Program Never data event state msg
+program_ localCache config =
     let
         realConfig storage =
             { appId = config.appId
@@ -139,15 +159,7 @@ program config =
                 Storage.Cache.cache
                     (Storage.Task.storage config.localStorage)
                     storage
-            , localCache =
-                Just
-                    { encoder = config.dataCache.encoder
-                    , decoder = config.dataCache.decoder
-                    , store =
-                        { read = config.localStorage.get ".data"
-                        , write = config.localStorage.add ".data"
-                        }
-                    }
+            , localCache = localCache
             }
 
         startApp storageConfig =
@@ -286,7 +298,6 @@ program config =
 {-| -}
 type alias DebugConfig data event =
     { appId : String
-    , dropboxAuthToken : String
     , data :
         { init : data
         , update : event -> data -> data
@@ -294,17 +305,26 @@ type alias DebugConfig data event =
         , decoder : Decoder event
         }
     , ui : Debug.Control.Control event
+    , serviceAppKeys :
+        { dropbox : Maybe String
+        }
     }
 
 
 {-| An extremely simple way to create a program to test out your domain logic.
 This will provide an extremely simple UI allowing you to add events and see the resulting domain state.
 -}
-debugProgram : DebugConfig data event -> Persistence.Program Never data event (Debug.Control.Control event) (Maybe (Debug.Control.Control event))
+debugProgram :
+    DebugConfig data event
+    -> Program Never data event (Debug.Control.Control event) (Maybe (Debug.Control.Control event))
 debugProgram config =
-    Persistence.program
+    program_ Nothing
         { appId = config.appId
         , data = config.data
+        , dataCache =
+            { encoder = always Json.Encode.null
+            , decoder = Json.Decode.fail "Persistence.Simple.debugProgram does not implement a data decoder.  Use Persistence.Simple.program instead if you want computed date caching."
+            }
         , ui =
             { init = ( config.ui, Cmd.none )
             , update =
@@ -318,18 +338,11 @@ debugProgram config =
             , subscriptions = \data state -> Sub.none
             , view = debugView config.appId
             }
-        , loadingView = Html.text "Loading (TODO: make this look nicer)"
-        , errorView =
-            \errors ->
-                Html.div []
-                    [ Html.text "Errors:"
-                    , errors |> List.map (\i -> Html.li [] [ Html.text i ]) |> Html.ul []
-                    , Html.text "TODO: make this look nicer"
-                    ]
-        , storage =
-            Storage.Dropbox.storage <|
-                Dropbox.authorizationFromAccessToken config.dropboxAuthToken
-        , localCache = Nothing
+        , localStorage =
+            { get = \_ -> Task.succeed Nothing
+            , add = \_ _ -> Task.succeed ()
+            }
+        , serviceAppKeys = config.serviceAppKeys
         }
 
 

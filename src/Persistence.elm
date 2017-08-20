@@ -1,6 +1,7 @@
 module Persistence
     exposing
         ( Config
+        , LocalCache
         , Model
         , Msg
         , PersistenceState(..)
@@ -22,7 +23,8 @@ module Persistence
 
 ## Creating a persistent program
 
-@docs Config, Program, program, programWithNavigation, programRecord, ProgramRecord
+@docs Config, LocalCache
+@docs Program, program, programWithNavigation, programRecord, ProgramRecord
 
 
 ## Stuff you shouldn't normally need
@@ -67,12 +69,16 @@ type alias Config data event state msg =
     , appId :
         -- This is used so that multiple apps can use the same storage configuration
         String
-    , localCache :
-        Maybe
-            { encoder : data -> Json.Encode.Value
-            , decoder : Decoder data
-            , store : Storage.CacheStore
-            }
+    , localCache : Maybe (LocalCache data)
+    }
+
+
+{-| Configuration for a persistent program's computed data cache.
+-}
+type alias LocalCache data =
+    { encoder : data -> Json.Encode.Value
+    , decoder : Decoder data
+    , store : Storage.CacheStore
     }
 
 
