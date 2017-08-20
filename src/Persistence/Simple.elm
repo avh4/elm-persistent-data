@@ -1,4 +1,4 @@
-module Persistence.Simple exposing (Config, DebugConfig, debugProgram, program, programWithNavigation)
+module Persistence.Simple exposing (Config, DebugConfig, Program, debugProgram, program, programWithNavigation)
 
 {-| A simplified wrapper for Persistence.program.
 
@@ -7,7 +7,7 @@ in `Persistence`.
 
 TODO: how to let the user log out? Probably via intercepting a special URL fragment
 
-@docs Config, program, programWithNavigation
+@docs Config, program, programWithNavigation, Program
 
 
 ## Even simpler programs
@@ -156,6 +156,8 @@ programWithNavigation onLocationChange config =
         config
 
 
+{-| Type alias for `Persistence.Simple.program`
+-}
 type alias Program flags data event state msg =
     Platform.Program flags (Model data event state msg) (Msg data event msg)
 
