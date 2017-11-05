@@ -1,4 +1,14 @@
-module Persistence.Simple exposing (Config, DebugConfig, Program, debugProgram, program, programWithNavigation)
+module Persistence.Simple
+    exposing
+        ( Config
+        , DebugConfig
+        , Program
+        , debugProgram
+        , devProgram
+        , devProgramWithNavigation
+        , program
+        , programWithNavigation
+        )
 
 {-| A simplified wrapper for Persistence.program.
 
@@ -8,6 +18,13 @@ in `Persistence`.
 TODO: how to let the user log out? Probably via intercepting a special URL fragment
 
 @docs Config, program, programWithNavigation, Program
+
+
+## Development
+
+These versions enable features in the UI that are useful for developers.
+
+@docs devProgram, devProgramWithNavigation
 
 
 ## Even simpler programs
@@ -25,7 +42,9 @@ import Navigation
 import Persistence
 import Persistence.SimpleAuth as SimpleAuth
 import Persistence.SimpleStorageConfig as StorageConfig exposing (StorageConfig)
+import Storage exposing (Storage)
 import Storage.Cache
+import Storage.Hash
 import Storage.Task
 import Task exposing (Task)
 
@@ -112,6 +131,7 @@ type Msg data event msg
     | ChangeLocation Navigation.Location
     | LoadedAuth (Maybe String)
     | AuthUiMsg SimpleAuth.Msg
+    | DebugNoAuth
     | MainAppMsg (Persistence.Msg data event msg)
 
 
@@ -121,6 +141,7 @@ program :
     -> Platform.Program Never (Model data event state msg) (Msg data event msg)
 program config =
     program_
+        False
         Nothing
         (always ())
         (Just
@@ -142,6 +163,50 @@ programWithNavigation :
     -> Platform.Program Never (Model data event state msg) (Msg data event msg)
 programWithNavigation onLocationChange config =
     program_
+        False
+        (Just onLocationChange)
+        identity
+        (Just
+            { encoder = config.dataCache.encoder
+            , decoder = config.dataCache.decoder
+            , store =
+                { read = config.localStorage.get ".data"
+                , write = config.localStorage.add ".data"
+                }
+            }
+        )
+        config
+
+
+{-| -}
+devProgram :
+    Config () data event state msg
+    -> Platform.Program Never (Model data event state msg) (Msg data event msg)
+devProgram config =
+    program_
+        True
+        Nothing
+        (always ())
+        (Just
+            { encoder = config.dataCache.encoder
+            , decoder = config.dataCache.decoder
+            , store =
+                { read = config.localStorage.get ".data"
+                , write = config.localStorage.add ".data"
+                }
+            }
+        )
+        config
+
+
+{-| -}
+devProgramWithNavigation :
+    (Navigation.Location -> msg)
+    -> Config Navigation.Location data event state msg
+    -> Platform.Program Never (Model data event state msg) (Msg data event msg)
+devProgramWithNavigation onLocationChange config =
+    program_
+        True
         (Just onLocationChange)
         identity
         (Just
@@ -163,12 +228,13 @@ type alias Program flags data event state msg =
 
 
 program_ :
-    Maybe (Navigation.Location -> msg)
+    Bool
+    -> Maybe (Navigation.Location -> msg)
     -> (Navigation.Location -> flags)
     -> Maybe (Persistence.LocalCache data)
     -> Config flags data event state msg
     -> Program Never data event state msg
-program_ onLocationChange makeFlags localCache config =
+program_ devMode onLocationChange makeFlags localCache config =
     let
         realConfig location storage =
             { appId = config.appId
@@ -194,10 +260,10 @@ program_ onLocationChange makeFlags localCache config =
             , localCache = localCache
             }
 
-        startApp location storageConfig =
+        startApp location storage =
             let
                 persConfig =
-                    realConfig location (StorageConfig.toStorage storageConfig)
+                    realConfig location storage
             in
             Persistence.init persConfig
                 |> Tuple.mapFirst (MainApp persConfig)
@@ -227,7 +293,7 @@ program_ onLocationChange makeFlags localCache config =
                                 |> Task.perform (\() -> NoOp)
 
                         ( newModel, persCmds ) =
-                            startApp location storageConfig
+                            startApp location (StorageConfig.toStorage storageConfig)
                     in
                     ( newModel
                     , Cmd.batch
@@ -284,7 +350,7 @@ program_ onLocationChange makeFlags localCache config =
                                     |> always (startAuth location)
 
                             Ok storageConfig ->
-                                startApp location storageConfig
+                                startApp location (StorageConfig.toStorage storageConfig)
 
                     ( LoadedAuth _, _ ) ->
                         -- Got auth data, but auth already finished; just ignore it
@@ -293,6 +359,9 @@ program_ onLocationChange makeFlags localCache config =
                     ( AuthUiMsg msg, AuthUi location model ) ->
                         SimpleAuth.update msg model
                             |> handleAuthUiResult location
+
+                    ( DebugNoAuth, AuthUi location model ) ->
+                        startApp location fakeStorage
 
                     ( MainAppMsg msg, MainApp config model ) ->
                         Persistence.update config msg model
@@ -303,6 +372,9 @@ program_ onLocationChange makeFlags localCache config =
                         Debug.crash "Internal error: We got a main app message before we started the main app!  This should never be possible!"
 
                     ( AuthUiMsg _, LoadingAuth _ ) ->
+                        Debug.crash "Internal error: We got an auth ui message before we started the auth ui!  This should never be possible!"
+
+                    ( DebugNoAuth, LoadingAuth _ ) ->
                         Debug.crash "Internal error: We got an auth ui message before we started the auth ui!  This should never be possible!"
 
                     ( _, MainApp _ _ ) ->
@@ -328,13 +400,35 @@ program_ onLocationChange makeFlags localCache config =
                         Html.text ""
 
                     AuthUi _ model ->
-                        SimpleAuth.view model
-                            |> Html.map AuthUiMsg
+                        Html.div []
+                            [ SimpleAuth.view model
+                                |> Html.map AuthUiMsg
+                            , if devMode then
+                                Html.button
+                                    [ onClick DebugNoAuth
+                                    ]
+                                    [ Html.text "DEBUG: no auth" ]
+                              else
+                                Html.text ""
+                            ]
 
                     MainApp config model ->
                         Persistence.view config model
                             |> Html.map MainAppMsg
         }
+
+
+fakeStorage : Storage
+fakeStorage =
+    { refs =
+        { read = \_ -> Task.succeed Nothing
+        , write = \_ _ _ -> Task.succeed ()
+        }
+    , content =
+        { read = \_ -> Task.fail "Using fake storage"
+        , write = \content -> Task.succeed (Storage.Hash.ofString content)
+        }
+    }
 
 
 {-| -}
@@ -361,6 +455,7 @@ debugProgram :
     -> Program Never data event (Debug.Control.Control event) (Maybe (Debug.Control.Control event))
 debugProgram config =
     program_
+        False
         Nothing
         (always ())
         Nothing
