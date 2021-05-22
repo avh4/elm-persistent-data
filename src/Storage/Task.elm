@@ -1,4 +1,4 @@
-module Storage.Task exposing (Config, storage)
+module Storage.Task exposing (storage, Config)
 
 {-| Creates a `Storage` implementation using the provided `Task`s.
 

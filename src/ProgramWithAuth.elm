@@ -1,11 +1,10 @@
-module ProgramWithAuth
-    exposing
-        ( AuthProgram
-        , Config
-        , Model
-        , Msg
-        , authProgram
-        )
+module ProgramWithAuth exposing
+    ( AuthProgram
+    , Config
+    , Model
+    , Msg
+    , authProgram
+    )
 
 import Html exposing (Html)
 import Navigation exposing (Location)

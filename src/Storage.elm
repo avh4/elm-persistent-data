@@ -1,4 +1,4 @@
-module Storage exposing (CacheStore, ContentStore, RefStore, Storage)
+module Storage exposing (Storage, RefStore, ContentStore, CacheStore)
 
 {-| This is the interface that must be implemented to connect a storage
 implementaiton to `Persistence`.

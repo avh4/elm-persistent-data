@@ -10,6 +10,7 @@ import ProgramRecord
 import Storage exposing (Storage)
 import Storage.Debug
 import Storage.ExampleServer
+import Url exposing (Url)
 
 
 type alias Data =
@@ -18,12 +19,10 @@ type alias Data =
 
 
 dataEncoder : Data -> Json.Encode.Value
-dataEncoder data =
+dataEncoder data_ =
     Json.Encode.object
         [ ( "list"
-          , data.list
-                |> List.map Json.Encode.string
-                |> Json.Encode.list
+          , Json.Encode.list Json.Encode.string data_.list
           )
         ]
 
@@ -49,7 +48,7 @@ decoder =
                         Json.Decode.field "$0" Json.Decode.string
 
                 _ ->
-                    Json.Decode.fail ("Not valid pattern for decoder to Event. Pattern: " ++ toString tag)
+                    Json.Decode.fail ("Not valid pattern for decoder to Event. Pattern: " ++ Debug.toString tag)
     in
     Json.Decode.field "tag" Json.Decode.string
         |> Json.Decode.andThen dispatch
@@ -82,7 +81,7 @@ type Msg
 
 
 updateUi : Data -> Msg -> UiState -> ( UiState, Cmd Msg, List Event )
-updateUi data msg state =
+updateUi _ msg state =
     case msg of
         Typed string ->
             ( { state | input = string }
@@ -93,6 +92,7 @@ updateUi data msg state =
         Add ->
             if state.input == "" then
                 ( state, Cmd.none, [] )
+
             else
                 ( { state | input = "" }
                 , Cmd.none
@@ -101,7 +101,7 @@ updateUi data msg state =
 
 
 view : Data -> UiState -> Html Msg
-view data state =
+view data_ state =
     Html.div []
         [ Html.h3 [] [ Html.text "Persistent TODO list" ]
         , Html.form [ Html.Events.onSubmit Add ]
@@ -114,7 +114,7 @@ view data state =
             ]
         , Html.hr [] []
         , Html.ul []
-            (List.map (\i -> Html.li [] [ Html.text i ]) data.list)
+            (List.map (\i -> Html.li [] [ Html.text i ]) data_.list)
         ]
 
 
@@ -139,7 +139,7 @@ ui =
     }
 
 
-programRecord : Storage -> Maybe Storage.CacheStore -> Persistence.ProgramRecord Never Data Event UiState Msg
+programRecord : Storage -> Maybe Storage.CacheStore -> Persistence.ProgramRecord () Data Event UiState Msg
 programRecord storage cacheStore =
     Persistence.programRecord
         { data = data
@@ -165,13 +165,13 @@ programRecord storage cacheStore =
         }
 
 
-program : Storage -> Maybe Storage.CacheStore -> Persistence.Program Never Data Event UiState Msg
+program : Storage -> Maybe Storage.CacheStore -> Persistence.Program Url Data Event UiState Msg
 program storage cacheStore =
     programRecord storage cacheStore
         |> ProgramRecord.toProgram
 
 
-main : Persistence.Program Never Data Event UiState Msg
+main : Persistence.Program Url Data Event UiState Msg
 main =
     program
         (Storage.Debug.storage "example-server (HTTP)" <|

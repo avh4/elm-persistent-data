@@ -1,11 +1,12 @@
 module Persistence.SimpleAuth exposing (Config, Model, Msg, init, update, view)
 
+import Browser.Navigation as Navigation
 import Dropbox
 import Html exposing (Html)
-import Html.Attributes exposing (defaultValue, placeholder)
+import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
-import Navigation
 import Persistence.SimpleStorageConfig as StorageConfig exposing (StorageConfig)
+import Url exposing (Url)
 
 
 type alias Config =
@@ -15,7 +16,7 @@ type alias Config =
 
 type Model
     = Model
-        { location : Navigation.Location
+        { location : Url
         , step : Step
         , config : Config
         , dropboxAuthToken : String
@@ -42,8 +43,8 @@ type Msg
     | ChangeDropboxClientId String
 
 
-init : Config -> Navigation.Location -> Result ( Model, Cmd Msg ) ( StorageConfig, Cmd never )
-init config location =
+init : Config -> Navigation.Key -> Url -> Result ( Model, Cmd Msg ) ( StorageConfig, Cmd never )
+init config key location =
     let
         model =
             { location = location
@@ -60,7 +61,7 @@ init config location =
         clearDropboxRedirectResult =
             -- TODO: preserve other fragment data if there was any (is that even possible after a Dropbox redirect?)
             -- TODO: don't leave the unnecessary "#" at the end of the URL
-            Navigation.modifyUrl "#"
+            Navigation.replaceUrl key "#"
     in
     case dropboxResult of
         Just (Dropbox.AuthorizeOk { userAuth }) ->
@@ -186,7 +187,7 @@ view (Model model) =
                 [ Html.text "For this advanced authentication method, you must have a Dropbox account.\n                             Then go to https://developers.dropbox.com and create a new App.\n                             On the new app's settings page, click \"Generate access token\"\n                             Copy the generated token here:"
                 , Html.input
                     [ placeholder "Dropbox auth token"
-                    , defaultValue model.dropboxAuthToken
+                    , value model.dropboxAuthToken
                     , onInput ChangeDropboxAuthToken
                     ]
                     []
@@ -205,7 +206,7 @@ view (Model model) =
             Html.div []
                 [ Html.input
                     [ placeholder "Dropbox client id"
-                    , defaultValue model.dropboxClientId
+                    , value model.dropboxClientId
                     , onInput ChangeDropboxClientId
                     ]
                     []

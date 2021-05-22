@@ -1,4 +1,4 @@
-module Storage.Debug exposing (cache, contentStore, refStore, storage)
+module Storage.Debug exposing (storage, refStore, contentStore, cache)
 
 {-| Add debugging out to a `Storage` implementation.
 

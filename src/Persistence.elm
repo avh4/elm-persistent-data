@@ -1,22 +1,9 @@
-module Persistence
-    exposing
-        ( Config
-        , LocalCache
-        , Model
-        , Msg
-        , PersistenceState(..)
-        , Program
-        , ProgramRecord
-        , current
-        , init
-        , program
-        , programRecord
-        , programWithNavigation
-        , subscriptions
-        , uimsg
-        , update
-        , view
-        )
+module Persistence exposing
+    ( Config, LocalCache
+    , Program, program, programWithNavigation, programRecord, ProgramRecord
+    , Model, Msg, uimsg, PersistenceState(..), current
+    , init, update, subscriptions, view
+    )
 
 {-|
 
@@ -37,15 +24,14 @@ module Persistence
 import Html exposing (Html)
 import Json.Decode exposing (Decoder)
 import Json.Encode
-import Navigation
-import Persistence.Batch as Batch exposing (Batch)
+import Persistence.Batch as Batch
 import Persistence.Initializer as Init
 import Process
 import ProgramRecord
 import Storage exposing (Storage)
 import Storage.Hash as Hash exposing (Hash)
 import Task exposing (Task)
-import Time
+import Url exposing (Url)
 
 
 {-| Configuration for a persistent program.
@@ -137,7 +123,7 @@ startup : Config data event state msg -> Task String ( Maybe ( Hash, data ), May
 startup config =
     let
         decoder cacheDecoder =
-            Json.Decode.map2 (,)
+            Json.Decode.map2 (\a b -> ( a, b ))
                 (Json.Decode.field "root" Hash.decode)
                 (Json.Decode.field "data" cacheDecoder)
 
@@ -145,7 +131,7 @@ startup config =
             Json.Decode.decodeString (decoder cacheDecoder) json
                 |> Result.toMaybe
     in
-    Task.map2 (,)
+    Task.map2 (\a b -> ( a, b ))
         (case config.localCache of
             Nothing ->
                 Task.succeed Nothing
@@ -218,7 +204,7 @@ jsonTask decoder task =
         parse json =
             case Json.Decode.decodeString decoder json of
                 Err message ->
-                    Task.fail message
+                    Task.fail (Json.Decode.errorToString message)
 
                 Ok value ->
                     Task.succeed value
@@ -369,7 +355,7 @@ update config msg (Model model) =
                 { model
                     | errors = ("Error reading root: " ++ message) :: model.errors
                 }
-            , Process.sleep (5 * Time.second)
+            , Process.sleep 5000
                 |> Task.andThen (\_ -> startup config)
                 |> Task.attempt Startup
             )
@@ -440,6 +426,7 @@ subscriptions config =
         if model.loaded && model.errors == [] then
             config.ui.subscriptions model.data model.ui
                 |> Sub.map UiMsg
+
         else
             Sub.none
 
@@ -456,8 +443,10 @@ view :
 view config (Model model) =
     if model.errors /= [] then
         Html.map never (config.errorView model.errors)
+
     else if model.loaded == False then
         Html.map never config.loadingView
+
     else
         config.ui.view model.data model.ui
             |> Html.map UiMsg
@@ -467,7 +456,7 @@ view config (Model model) =
 -}
 program :
     Config data event state msg
-    -> Program Never data event state msg
+    -> Program Url data event state msg
 program config =
     ProgramRecord.toProgram <|
         programRecord config
@@ -482,7 +471,7 @@ You may need to use this if you need more control over how and when the persiste
 -}
 programRecord :
     Config data event state msg
-    -> ProgramRecord Never data event state msg
+    -> ProgramRecord () data event state msg
 programRecord config =
     ProgramRecord.htmlProgram
         { init = init config
@@ -504,7 +493,7 @@ programAndThen next ( a, cmdA ) =
 {-| Create a persistent program with navigation (see elm-lang/navigation).
 -}
 programWithNavigation :
-    (Navigation.Location -> msg)
+    (Url -> msg)
     -> Config data event state msg
     -> ProgramRecord Never data event state msg
 programWithNavigation locationToMessage config =

@@ -21,7 +21,7 @@ storage auth =
                                 Task.succeed Nothing
 
                             Err other ->
-                                Task.fail (toString other)
+                                Task.fail (Debug.toString other)
 
                             Ok response ->
                                 Task.succeed <| Just response.content
@@ -57,13 +57,14 @@ storage auth =
                         Dropbox.download auth { path = path }
                             |> Task.map Just
                             |> Task.onError ignoreNotFound
-                            |> Task.mapError toString
+                            |> Task.mapError Debug.toString
                             |> Task.andThen verifyContent
 
                     verifyContent : Maybe Dropbox.DownloadResponse -> Task String (Maybe String)
                     verifyContent response =
                         if Maybe.map .content response == oldValue then
                             Task.succeed (Maybe.map .rev response)
+
                         else
                             Task.fail (key ++ ": Existing content doesn't match")
 
@@ -81,7 +82,7 @@ storage auth =
                             , content = newValue
                             }
                             |> Task.map (always ())
-                            |> Task.mapError toString
+                            |> Task.mapError Debug.toString
                 in
                 fetchOldRev
                     |> Task.andThen putNew
@@ -93,7 +94,7 @@ storage auth =
                     { path = "/content/" ++ Hash.toString hash
                     }
                     |> Task.map .content
-                    |> Task.mapError toString
+                    |> Task.mapError Debug.toString
         , write =
             \content ->
                 let
@@ -108,7 +109,7 @@ storage auth =
                     , mute = True
                     , content = content
                     }
-                    |> Task.mapError toString
+                    |> Task.mapError Debug.toString
                     |> Task.map (always hash)
         }
     }

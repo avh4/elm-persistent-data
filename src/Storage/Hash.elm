@@ -1,4 +1,4 @@
-module Storage.Hash exposing (Hash(..), decode, encode, fromString, ofString, toString)
+module Storage.Hash exposing (Hash(..), decode, encode, fromString, toString, ofString)
 
 {-| This is the interface that must be implemented to connect a storage
 implementaiton to `Persistence`.

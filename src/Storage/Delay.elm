@@ -1,4 +1,4 @@
-module Storage.Delay exposing (cache, contentStore, refStore, storage)
+module Storage.Delay exposing (storage, refStore, contentStore, cache)
 
 {-| Add delays to a `Storage` implementation to assist in debugging.
 
@@ -6,15 +6,15 @@ module Storage.Delay exposing (cache, contentStore, refStore, storage)
 
 -}
 
+import Duration exposing (Duration)
 import Process
 import Storage exposing (CacheStore, ContentStore, RefStore, Storage)
 import Task
-import Time exposing (Time)
 
 
 {-| Add delays to a `Storage` implementation.
 -}
-storage : Time -> Storage -> Storage
+storage : Duration -> Storage -> Storage
 storage delay impl =
     { refs = refStore delay impl.refs
     , content = contentStore delay impl.content
@@ -23,43 +23,43 @@ storage delay impl =
 
 {-| Add delays to a `RefStore`
 -}
-refStore : Time -> RefStore -> RefStore
+refStore : Duration -> RefStore -> RefStore
 refStore delay impl =
     { read =
         \key ->
-            Process.sleep delay
+            Process.sleep (Duration.inMilliseconds delay)
                 |> Task.andThen (\() -> impl.read key)
     , write =
         \key oldValue newValue ->
-            Process.sleep delay
+            Process.sleep (Duration.inMilliseconds delay)
                 |> Task.andThen (\() -> impl.write key oldValue newValue)
     }
 
 
 {-| Add delays to a `ContentStore`
 -}
-contentStore : Time -> ContentStore -> ContentStore
+contentStore : Duration -> ContentStore -> ContentStore
 contentStore delay impl =
     { read =
         \hash ->
-            Process.sleep delay
+            Process.sleep (Duration.inMilliseconds delay)
                 |> Task.andThen (\() -> impl.read hash)
     , write =
         \value ->
-            Process.sleep delay
+            Process.sleep (Duration.inMilliseconds delay)
                 |> Task.andThen (\() -> impl.write value)
     }
 
 
 {-| Add delays to a `CacheStore`
 -}
-cache : Time -> CacheStore -> CacheStore
+cache : Duration -> CacheStore -> CacheStore
 cache delay impl =
     { read =
-        Process.sleep delay
+        Process.sleep (Duration.inMilliseconds delay)
             |> Task.andThen (\() -> impl.read)
     , write =
         \value ->
-            Process.sleep delay
+            Process.sleep (Duration.inMilliseconds delay)
                 |> Task.andThen (\() -> impl.write value)
     }

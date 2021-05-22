@@ -59,5 +59,6 @@ handleParent config next allMsgs =
                 Just cached ->
                     if cached.root == parentId then
                         done cached.data
+
                     else
                         fetchNext

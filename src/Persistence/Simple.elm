@@ -1,14 +1,8 @@
-module Persistence.Simple
-    exposing
-        ( Config
-        , DebugConfig
-        , Program
-        , debugProgram
-        , devProgram
-        , devProgramWithNavigation
-        , program
-        , programWithNavigation
-        )
+module Persistence.Simple exposing
+    ( Config, program, programWithNavigation, Program
+    , devProgram, devProgramWithNavigation
+    , debugProgram, DebugConfig
+    )
 
 {-| A simplified wrapper for Persistence.program.
 
@@ -33,20 +27,22 @@ These versions enable features in the UI that are useful for developers.
 
 -}
 
+import Browser
+import Browser.Navigation as Navigation
 import Debug.Control
 import Html exposing (Html)
 import Html.Events exposing (onClick)
 import Json.Decode exposing (Decoder)
 import Json.Encode
-import Navigation
 import Persistence
 import Persistence.SimpleAuth as SimpleAuth
-import Persistence.SimpleStorageConfig as StorageConfig exposing (StorageConfig)
+import Persistence.SimpleStorageConfig as StorageConfig
 import Storage exposing (Storage)
 import Storage.Cache
 import Storage.Hash
 import Storage.Task
 import Task exposing (Task)
+import Url exposing (Url)
 
 
 {-| Configuration for a [`Persistence.Simple.program`](#program).
@@ -121,14 +117,15 @@ type alias Config flags data event state msg =
 
 
 type Model data event state msg
-    = LoadingAuth Navigation.Location
-    | AuthUi Navigation.Location SimpleAuth.Model
-    | MainApp (Persistence.Config data event state msg) (Persistence.Model data state)
+    = LoadingAuth Navigation.Key Url
+    | AuthUi Navigation.Key Url SimpleAuth.Model
+    | MainApp Navigation.Key (Persistence.Config data event state msg) (Persistence.Model data state)
 
 
 type Msg data event msg
     = NoOp
-    | ChangeLocation Navigation.Location
+    | UrlChange Url
+    | UrlRequest Browser.UrlRequest
     | LoadedAuth (Maybe String)
     | AuthUiMsg SimpleAuth.Msg
     | DebugNoAuth
@@ -138,7 +135,7 @@ type Msg data event msg
 {-| -}
 program :
     Config () data event state msg
-    -> Platform.Program Never (Model data event state msg) (Msg data event msg)
+    -> Platform.Program () (Model data event state msg) (Msg data event msg)
 program config =
     program_
         False
@@ -158,9 +155,9 @@ program config =
 
 {-| -}
 programWithNavigation :
-    (Navigation.Location -> msg)
-    -> Config Navigation.Location data event state msg
-    -> Platform.Program Never (Model data event state msg) (Msg data event msg)
+    (Url -> msg)
+    -> Config Url data event state msg
+    -> Platform.Program () (Model data event state msg) (Msg data event msg)
 programWithNavigation onLocationChange config =
     program_
         False
@@ -181,7 +178,7 @@ programWithNavigation onLocationChange config =
 {-| -}
 devProgram :
     Config () data event state msg
-    -> Platform.Program Never (Model data event state msg) (Msg data event msg)
+    -> Platform.Program () (Model data event state msg) (Msg data event msg)
 devProgram config =
     program_
         True
@@ -201,9 +198,9 @@ devProgram config =
 
 {-| -}
 devProgramWithNavigation :
-    (Navigation.Location -> msg)
-    -> Config Navigation.Location data event state msg
-    -> Platform.Program Never (Model data event state msg) (Msg data event msg)
+    (Url -> msg)
+    -> Config Url data event state msg
+    -> Platform.Program () (Model data event state msg) (Msg data event msg)
 devProgramWithNavigation onLocationChange config =
     program_
         True
@@ -229,11 +226,11 @@ type alias Program flags data event state msg =
 
 program_ :
     Bool
-    -> Maybe (Navigation.Location -> msg)
-    -> (Navigation.Location -> flags)
+    -> Maybe (Url -> msg)
+    -> (Url -> flags)
     -> Maybe (Persistence.LocalCache data)
     -> Config flags data event state msg
-    -> Program Never data event state msg
+    -> Program () data event state msg
 program_ devMode onLocationChange makeFlags localCache config =
     let
         realConfig location storage =
@@ -260,27 +257,28 @@ program_ devMode onLocationChange makeFlags localCache config =
             , localCache = localCache
             }
 
-        startApp location storage =
+        startApp key location storage =
             let
                 persConfig =
                     realConfig location storage
             in
             Persistence.init persConfig
-                |> Tuple.mapFirst (MainApp persConfig)
+                |> Tuple.mapFirst (MainApp key persConfig)
                 |> Tuple.mapSecond (Cmd.map MainAppMsg)
 
-        startAuth location =
+        startAuth key location =
             SimpleAuth.init
                 { dropboxAppKey = config.serviceAppKeys.dropbox
                 }
+                key
                 location
-                |> handleAuthUiResult location
+                |> handleAuthUiResult key location
 
-        handleAuthUiResult location result =
+        handleAuthUiResult key location result =
             case result of
                 Err continue ->
                     continue
-                        |> Tuple.mapFirst (AuthUi location)
+                        |> Tuple.mapFirst (AuthUi key location)
                         |> Tuple.mapSecond (Cmd.map AuthUiMsg)
 
                 Ok ( storageConfig, cmd ) ->
@@ -293,7 +291,7 @@ program_ devMode onLocationChange makeFlags localCache config =
                                 |> Task.perform (\() -> NoOp)
 
                         ( newModel, persCmds ) =
-                            startApp location (StorageConfig.toStorage storageConfig)
+                            startApp key location (StorageConfig.toStorage storageConfig)
                     in
                     ( newModel
                     , Cmd.batch
@@ -303,41 +301,45 @@ program_ devMode onLocationChange makeFlags localCache config =
                         ]
                     )
     in
-    Navigation.program
-        ChangeLocation
+    Browser.application
         { init =
-            \location ->
-                ( LoadingAuth location
+            \() location key ->
+                ( LoadingAuth key location
                 , config.localStorage.get ".auth"
                     |> Task.perform LoadedAuth
                 )
+        , onUrlChange = UrlChange
+        , onUrlRequest = UrlRequest
         , update =
             \msg model ->
                 case ( msg, model ) of
                     ( NoOp, _ ) ->
                         ( model, Cmd.none )
 
-                    ( ChangeLocation location, LoadingAuth _ ) ->
-                        ( LoadingAuth location, Cmd.none )
+                    ( UrlChange location, LoadingAuth key _ ) ->
+                        ( LoadingAuth key location, Cmd.none )
 
-                    ( ChangeLocation location, MainApp config model ) ->
+                    ( UrlChange location, MainApp key appConfig appModel ) ->
                         case onLocationChange of
-                            Just msg ->
-                                Persistence.update config (Persistence.uimsg <| msg location) model
-                                    |> Tuple.mapFirst (MainApp config)
+                            Just appMsg ->
+                                Persistence.update appConfig (Persistence.uimsg <| appMsg location) appModel
+                                    |> Tuple.mapFirst (MainApp key appConfig)
                                     |> Tuple.mapSecond (Cmd.map MainAppMsg)
 
                             Nothing ->
-                                ( MainApp config model, Cmd.none )
+                                ( MainApp key appConfig appModel, Cmd.none )
 
-                    ( ChangeLocation _, _ ) ->
+                    ( UrlChange _, _ ) ->
                         ( model, Cmd.none )
 
-                    ( LoadedAuth Nothing, LoadingAuth location ) ->
-                        -- No auth data was stored, so ask the user to log in
-                        startAuth location
+                    ( UrlRequest _, _ ) ->
+                        Debug.todo ("TODO: " ++ Debug.toString msg)
 
-                    ( LoadedAuth (Just string), LoadingAuth location ) ->
+                    ( LoadedAuth Nothing, LoadingAuth key location ) ->
+                        -- No auth data was stored, so ask the user to log in
+                        startAuth key location
+
+                    ( LoadedAuth (Just string), LoadingAuth key location ) ->
                         case Json.Decode.decodeString StorageConfig.decoder string of
                             Err message ->
                                 -- Assuming no one else wrote to the ".auth" key,
@@ -347,74 +349,79 @@ program_ devMode onLocationChange makeFlags localCache config =
                                 -- (which will force the user to log in again)
                                 message
                                     |> Debug.log "Failed to decode stored auth info"
-                                    |> always (startAuth location)
+                                    |> always (startAuth key location)
 
                             Ok storageConfig ->
-                                startApp location (StorageConfig.toStorage storageConfig)
+                                startApp key location (StorageConfig.toStorage storageConfig)
 
                     ( LoadedAuth _, _ ) ->
                         -- Got auth data, but auth already finished; just ignore it
                         ( model, Cmd.none )
 
-                    ( AuthUiMsg msg, AuthUi location model ) ->
-                        SimpleAuth.update msg model
-                            |> handleAuthUiResult location
+                    ( AuthUiMsg authMsg, AuthUi key location authModel ) ->
+                        SimpleAuth.update authMsg authModel
+                            |> handleAuthUiResult key location
 
-                    ( DebugNoAuth, AuthUi location model ) ->
-                        startApp location fakeStorage
+                    ( DebugNoAuth, AuthUi key location authModel ) ->
+                        startApp key location fakeStorage
 
-                    ( MainAppMsg msg, MainApp config model ) ->
-                        Persistence.update config msg model
-                            |> Tuple.mapFirst (MainApp config)
+                    ( MainAppMsg appMsg, MainApp key appConfig appModel ) ->
+                        Persistence.update appConfig appMsg appModel
+                            |> Tuple.mapFirst (MainApp key appConfig)
                             |> Tuple.mapSecond (Cmd.map MainAppMsg)
 
                     ( MainAppMsg _, _ ) ->
-                        Debug.crash "Internal error: We got a main app message before we started the main app!  This should never be possible!"
+                        Debug.todo "Internal error: We got a main app message before we started the main app!  This should never be possible!"
 
-                    ( AuthUiMsg _, LoadingAuth _ ) ->
-                        Debug.crash "Internal error: We got an auth ui message before we started the auth ui!  This should never be possible!"
+                    ( AuthUiMsg _, LoadingAuth _ _ ) ->
+                        Debug.todo "Internal error: We got an auth ui message before we started the auth ui!  This should never be possible!"
 
-                    ( DebugNoAuth, LoadingAuth _ ) ->
-                        Debug.crash "Internal error: We got an auth ui message before we started the auth ui!  This should never be possible!"
+                    ( DebugNoAuth, LoadingAuth _ _ ) ->
+                        Debug.todo "Internal error: We got an auth ui message before we started the auth ui!  This should never be possible!"
 
-                    ( _, MainApp _ _ ) ->
+                    ( _, MainApp _ _ _ ) ->
                         -- An auth UI message came in after auth finished; just ignore it
                         ( model, Cmd.none )
         , subscriptions =
             \model ->
                 case model of
-                    LoadingAuth _ ->
+                    LoadingAuth _ _ ->
                         Sub.none
 
-                    AuthUi _ _ ->
+                    AuthUi _ _ _ ->
                         Sub.none
 
-                    MainApp config model ->
-                        Persistence.subscriptions config model
+                    MainApp _ appConfig appModel ->
+                        Persistence.subscriptions appConfig appModel
                             |> Sub.map MainAppMsg
         , view =
             \model ->
-                case model of
-                    LoadingAuth _ ->
-                        -- This should be nearly instantaneous (just a read to localstorage, so no need to show anything)
-                        Html.text ""
+                { title = ""
+                , body =
+                    [ case model of
+                        LoadingAuth _ _ ->
+                            -- This should be nearly instantaneous (just a read to localstorage, so no need to show anything)
+                            Html.text ""
 
-                    AuthUi _ model ->
-                        Html.div []
-                            [ SimpleAuth.view model
-                                |> Html.map AuthUiMsg
-                            , if devMode then
-                                Html.button
-                                    [ onClick DebugNoAuth
-                                    ]
-                                    [ Html.text "DEBUG: no auth" ]
-                              else
-                                Html.text ""
-                            ]
+                        AuthUi _ _ authModel ->
+                            Html.div []
+                                [ SimpleAuth.view authModel
+                                    |> Html.map AuthUiMsg
+                                , if devMode then
+                                    Html.button
+                                        [ onClick DebugNoAuth
+                                        ]
+                                        [ Html.text "DEBUG: no auth" ]
 
-                    MainApp config model ->
-                        Persistence.view config model
-                            |> Html.map MainAppMsg
+                                  else
+                                    Html.text ""
+                                ]
+
+                        MainApp _ appConfig appModel ->
+                            Persistence.view appConfig appModel
+                                |> Html.map MainAppMsg
+                    ]
+                }
         }
 
 
@@ -452,7 +459,7 @@ This will provide an extremely simple UI allowing you to add events and see the 
 -}
 debugProgram :
     DebugConfig data event
-    -> Program Never data event (Debug.Control.Control event) (Maybe (Debug.Control.Control event))
+    -> Program () data event (Debug.Control.Control event) (Maybe (Debug.Control.Control event))
 debugProgram config =
     program_
         False
@@ -491,7 +498,7 @@ debugView appId data control =
     Html.div []
         [ Html.h2 [] [ Html.text appId ]
         , Html.h3 [] [ Html.text "data" ]
-        , Html.text (toString data)
+        , Html.text (Debug.toString data)
         , Html.h3 [] [ Html.text "new event" ]
         , Debug.Control.view Just control
         , Html.button [ onClick Nothing ] [ Html.text "Add" ]

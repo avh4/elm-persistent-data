@@ -9,7 +9,6 @@ module Storage.ExampleServer exposing (storage)
 import Http
 import Storage exposing (Storage)
 import Storage.Hash as Hash
-import Task
 
 
 {-| An example `Storage` implementation using HTTP.
@@ -20,6 +19,7 @@ storage rootUrl =
         root =
             if String.endsWith "/" rootUrl then
                 String.dropRight 1 rootUrl
+
             else
                 rootUrl
     in
@@ -27,24 +27,41 @@ storage rootUrl =
         { read =
             \key ->
                 let
-                    onError error =
-                        case error of
-                            Http.BadStatus response ->
-                                if response.status.code == 404 then
-                                    Task.succeed Nothing
+                    resolve response =
+                        case response of
+                            Http.BadStatus_ metadata _ ->
+                                if metadata.statusCode == 404 then
+                                    Ok Nothing
+
                                 else
-                                    Task.fail (toString error)
+                                    Err (Debug.toString response)
+
+                            Http.GoodStatus_ _ body ->
+                                Ok (Just body)
 
                             _ ->
-                                Task.fail (toString error)
+                                Err (Debug.toString response)
                 in
-                Http.getString (root ++ "/refs/" ++ key)
-                    |> Http.toTask
-                    |> Task.map Just
-                    |> Task.onError onError
+                Http.task
+                    { method = "GET"
+                    , headers = []
+                    , url = root ++ "/refs/" ++ key
+                    , body = Http.emptyBody
+                    , resolver = Http.stringResolver resolve
+                    , timeout = Nothing
+                    }
         , write =
             \key oldValue newValue ->
-                Http.request
+                let
+                    resolve response =
+                        case response of
+                            Http.GoodStatus_ _ _ ->
+                                Ok ()
+
+                            _ ->
+                                Err (Debug.toString response)
+                in
+                Http.task
                     { method = "PUT"
                     , headers =
                         [ case oldValue of
@@ -59,37 +76,51 @@ storage rootUrl =
                         Http.stringBody
                             "application/octet-stream"
                             newValue
-                    , expect = Http.expectStringResponse (\_ -> Ok ())
+                    , resolver = Http.stringResolver resolve
                     , timeout = Nothing
-                    , withCredentials = False
                     }
-                    |> Http.toTask
-                    |> Task.map (always ())
-                    |> Task.mapError toString
         }
     , content =
         { read =
             \hash ->
-                Http.getString (root ++ "/content/" ++ Hash.toString hash)
-                    |> Http.toTask
-                    |> Task.mapError toString
+                let
+                    resolve response =
+                        case response of
+                            Http.GoodStatus_ _ body ->
+                                Ok body
+
+                            _ ->
+                                Err (Debug.toString response)
+                in
+                Http.task
+                    { method = "GET"
+                    , headers = []
+                    , url = root ++ "/content/" ++ Hash.toString hash
+                    , body = Http.emptyBody
+                    , resolver = Http.stringResolver resolve
+                    , timeout = Nothing
+                    }
         , write =
             \content ->
                 let
                     hash =
                         Hash.ofString content
+
+                    resolve response =
+                        case response of
+                            Http.GoodStatus_ _ _ ->
+                                Ok hash
+
+                            _ ->
+                                Err (Debug.toString response)
                 in
-                Http.request
+                Http.task
                     { method = "PUT"
                     , headers = []
                     , url = root ++ "/content/" ++ Hash.toString hash
                     , body = Http.stringBody "application/octet-stream" content
-                    , expect = Http.expectStringResponse (\_ -> Ok ())
+                    , resolver = Http.stringResolver resolve
                     , timeout = Nothing
-                    , withCredentials = False
                     }
-                    |> Http.toTask
-                    |> Task.map (always hash)
-                    |> Task.mapError toString
         }
     }

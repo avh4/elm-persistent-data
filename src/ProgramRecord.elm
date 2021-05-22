@@ -1,18 +1,18 @@
-module ProgramRecord
-    exposing
-        ( ProgramRecord
-        , ProgramType(..)
-        , applyInit
-        , completableProgram
-        , getLocationChange
-        , htmlProgram
-        , navigationProgram
-        , toProgram
-        , withFlags
-        )
+module ProgramRecord exposing
+    ( ProgramRecord
+    , ProgramType(..)
+    , applyInit
+    , completableProgram
+    , getLocationChange
+    , htmlProgram
+    , navigationProgram
+    , toProgram
+    , withFlags
+    )
 
+import Browser
 import Html exposing (Html)
-import Navigation exposing (Location)
+import Url exposing (Url)
 
 
 {-| `update` and `init` return a `Result` where:
@@ -40,8 +40,8 @@ type alias ProgramRecord_ flags init done model msg =
 type ProgramType flags init msg
     = NoArgs init
     | WithFlags (flags -> init)
-    | WithLocation (Location -> init) (Location -> msg)
-    | WithBoth (flags -> Location -> init) (Location -> msg)
+    | WithLocation (Url -> init) (Url -> msg)
+    | WithBoth (flags -> Url -> init) (Url -> msg)
 
 
 withFlags :
@@ -61,7 +61,7 @@ withFlags r =
                     WithFlags <| \flags -> f flags flags
 
                 WithLocation f onLoc ->
-                    WithBoth (flip f) onLoc
+                    WithBoth (\b a -> f a b) onLoc
 
                 WithBoth f onLoc ->
                     WithBoth (\flags loc -> f flags loc flags) onLoc
@@ -73,7 +73,7 @@ withFlags r =
     }
 
 
-applyInit : ProgramType flags init msg -> Maybe flags -> Location -> init
+applyInit : ProgramType flags init msg -> Maybe flags -> Url -> init
 applyInit init flags location =
     case ( flags, init ) of
         ( Nothing, NoArgs value ) ->
@@ -83,7 +83,7 @@ applyInit init flags location =
             f location
 
         ( Nothing, _ ) ->
-            Debug.crash "Program requires flags, but none were provided"
+            Debug.todo "Program requires flags, but none were provided"
 
         ( Just fl, WithFlags f ) ->
             f fl
@@ -92,10 +92,10 @@ applyInit init flags location =
             f fl location
 
         ( Just _, _ ) ->
-            Debug.crash "Program has flags=Never, but flags were provided"
+            Debug.todo "Program has flags=Never, but flags were provided"
 
 
-getLocationChange : ProgramType flags init msg -> Maybe (Location -> msg)
+getLocationChange : ProgramType flags init msg -> Maybe (Url -> msg)
 getLocationChange init =
     case init of
         NoArgs _ ->
@@ -111,47 +111,53 @@ getLocationChange init =
             Just f
 
 
-toProgram : ProgramRecord Never Never model msg -> Platform.Program Never model msg
+toProgram : ProgramRecord () Never model msg -> Platform.Program Url model msg
 toProgram record =
     case record.init of
         NoArgs value ->
-            Html.program
-                { init = value |> handleNever
-                , update = record.update >>> handleNever
+            Browser.element
+                { init = \_ -> value |> handleNever
+                , update = record.update |> c2 handleNever
                 , subscriptions = record.subscriptions
                 , view = record.view
                 }
 
         WithFlags init ->
-            Html.programWithFlags
-                { init = init >> handleNever
-                , update = record.update >>> handleNever
+            Browser.element
+                { init = always () >> init >> handleNever
+                , update = record.update |> c2 handleNever
                 , subscriptions = record.subscriptions
                 , view = record.view
                 }
 
         WithLocation init onLocationChange ->
-            Navigation.program
-                onLocationChange
+            let
+                _ =
+                    Debug.log "TODO: navigation events are not handled"
+            in
+            Browser.element
                 { init = init >> handleNever
-                , update = record.update >>> handleNever
+                , update = record.update |> c2 handleNever
                 , subscriptions = record.subscriptions
                 , view = record.view
                 }
 
         WithBoth init onLocationChange ->
-            Navigation.programWithFlags
-                onLocationChange
-                { init = init >>> handleNever
-                , update = record.update >>> handleNever
+            let
+                _ =
+                    Debug.log "TODO: navigation events are not handled"
+            in
+            Browser.element
+                { init = init () >> handleNever
+                , update = record.update |> c2 handleNever
                 , subscriptions = record.subscriptions
                 , view = record.view
                 }
 
 
-(>>>) : (a -> b -> y) -> (y -> z) -> (a -> b -> z)
-(>>>) y f a b =
-    f (y a b)
+c2 : (c -> d) -> (a -> b -> c) -> (a -> b -> d)
+c2 f y a b =
+    y a b |> f
 
 
 htmlProgram :
@@ -160,19 +166,19 @@ htmlProgram :
     , subscriptions : model -> Sub msg
     , view : model -> Html msg
     }
-    -> ProgramRecord Never Never model msg
+    -> ProgramRecord () Never model msg
 htmlProgram config =
     { init = NoArgs (Err config.init)
-    , update = config.update >>> Err
+    , update = config.update |> c2 Err
     , subscriptions = config.subscriptions
     , view = config.view
     }
 
 
 navigationProgram :
-    (Location -> msg)
+    (Url -> msg)
     ->
-        { init : Location -> ( model, Cmd msg )
+        { init : Url -> ( model, Cmd msg )
         , update : msg -> model -> ( model, Cmd msg )
         , view : model -> Html msg
         , subscriptions : model -> Sub msg
@@ -180,24 +186,24 @@ navigationProgram :
     -> ProgramRecord Never Never model msg
 navigationProgram onLocationChange config =
     { init = WithLocation (config.init >> Err) onLocationChange
-    , update = config.update >>> Err
+    , update = config.update |> c2 Err
     , subscriptions = config.subscriptions
     , view = config.view
     }
 
 
 navigationProgramWithFlags :
-    (Location -> msg)
+    (Url -> msg)
     ->
-        { init : flags -> Location -> ( model, Cmd msg )
+        { init : flags -> Url -> ( model, Cmd msg )
         , update : msg -> model -> ( model, Cmd msg )
         , view : model -> Html msg
         , subscriptions : model -> Sub msg
         }
     -> ProgramRecord flags Never model msg
 navigationProgramWithFlags onLocationChange config =
-    { init = WithBoth (config.init >>> Err) onLocationChange
-    , update = config.update >>> Err
+    { init = WithBoth (config.init |> c2 Err) onLocationChange
+    , update = config.update |> c2 Err
     , subscriptions = config.subscriptions
     , view = config.view
     }

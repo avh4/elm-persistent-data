@@ -29,7 +29,7 @@ decoder =
                             |> Decode.map Dropbox
 
                     _ ->
-                        Decode.fail ("Got an unknown type: " ++ toString t)
+                        Decode.fail ("Got an unknown type: " ++ Debug.toString t)
             )
 
 

@@ -37,12 +37,13 @@ encoder decodeEvent encodeEvent { events, parent } =
             if Ok event /= decoded then
                 Err
                     ("Encoded value does not decode:\n\nOriginal:\n  "
-                        ++ toString event
+                        ++ Debug.toString event
                         ++ "\nJSON:\n  "
                         ++ Json.Encode.encode 0 json
                         ++ "\nDecoded:\n  "
-                        ++ toString decoded
+                        ++ Debug.toString decoded
                     )
+
             else
                 Ok (json :: acc)
     in
@@ -50,9 +51,9 @@ encoder decodeEvent encodeEvent { events, parent } =
         Err message ->
             Err message
 
-        Ok events ->
+        Ok events_ ->
             Json.Encode.object
-                [ ( "events", Json.Encode.list events )
+                [ ( "events", Json.Encode.list identity events_ )
                 , ( "parent"
                   , parent
                         |> Maybe.map Hash.encode
